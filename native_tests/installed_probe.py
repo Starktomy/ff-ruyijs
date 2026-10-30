@@ -17,12 +17,25 @@ class Tests(unittest.TestCase):
     def run_client(self, code, ca):
         environment = {k:v for k,v in os.environ.items() if k not in
                        ('PYTHONPATH','RUYIJS_SHELL','RUYIJS_NATIVE_NECKO_PYTHON','RUYIJS_HTTP_BACKEND')}
-        environment['RUYIJS_TLS_CA_FILE'] = str(ca)
+        if ca is not None:
+            environment['RUYIJS_TLS_CA_FILE'] = str(ca)
         with tempfile.TemporaryDirectory(prefix='ruyijs-installed-check-') as directory:
             result = subprocess.run([str(PYTHON),'-I','-B','-c',code],cwd=directory,env=environment,
                                     capture_output=True,text=True,timeout=40)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         return json.loads(result.stdout)
+
+    def test_installed_batch_and_prepared_pool(self):
+        result=self.run_client('''
+import json
+from ruyijs import ContextPool
+with ContextPool(size=1,timeout=15) as pool:
+    pool.warm(timeout=15)
+    with pool.context() as ctx:
+        result=ctx.eval_many(['let n=40;n','n+2'])
+print(json.dumps(result))
+''',None)
+        self.assertEqual(result,[40,42])
 
     def test_installed_h3_and_helper_isolation(self):
         fixture=Fixture()

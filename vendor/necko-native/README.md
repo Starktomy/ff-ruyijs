@@ -62,3 +62,11 @@ Firefox donor is unchanged. Linux wheels include a relocatable private native
 CPython helper, these adapters and NSS/Neqo; build the helper before packaging.
 `Context(cert=...)` passes per-context PEM paths through the original transport;
 private keys are never included in network reports.
+
+Linux HTTP helpers use `--multiplex --timing-v3`: request tickets correlate
+concurrent responses and cancellation while the original H2/H3 connection pools
+remain in control. A persistent forking thread owns each helper, retaining Linux
+parent-death cleanup across temporary caller threads. The original sequential
+helper modes remain available for the Windows path and direct callers.
+`necko/_trust.py` reuses immutable parsed default roots with file-identity
+invalidation; explicit CA files and client identities are read as before.

@@ -305,3 +305,13 @@ them with a real Mesa/Vulkan/Dawn backend. These are engine feature limits, rath
 than calls into Windows binaries. DirectWrite rasterization and exact Windows
 font fallback still require separate comparison with matching fonts and a Windows
 baseline. Font/Canvas fingerprint equality is therefore not a completed claim.
+
+## Performance
+
+`Context.eval_many()` runs ordered scripts in one RPC; `ContextPool` prepares
+fresh processes ahead of acquisition. Linux HTTP helpers now multiplex bounded
+transactions through the existing H2/H3 adapter, and their persistent owner
+threads keep helpers alive across short-lived request threads. Default trust
+stores and unchanged build inputs are reused without changing page clocks or
+certificate/hostname verification. See [PERFORMANCE.md](PERFORMANCE.md) for API
+semantics, measured results and a reproducible benchmark.
