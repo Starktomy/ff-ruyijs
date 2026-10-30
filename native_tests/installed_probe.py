@@ -37,6 +37,40 @@ print(json.dumps(result))
 ''',None)
         self.assertEqual(result,[40,42])
 
+    def test_installed_iframe_lifecycle(self):
+        result = self.run_client('''
+import json
+from ruyijs import Context
+from ruyijs._runtime_paths import get_runtime_path
+with Context(timeout=15) as ctx:
+    ctx.configure_clock('logical',epoch_ms=1700000000000)
+    ctx.load_page('https://frames.test/','<!doctype html><html><body></body></html>')
+    ctx.set('first',"<script>parent.order.push('stale')</script>")
+    ctx.set('latest',"<script>parent.order.push(parent.marker)</script><main>child</main>")
+    before=ctx.eval("""window.order=[];window.marker='early';
+        window.host=document.createElement('div');window.root=host.attachShadow({mode:'closed'});
+        window.frame=document.createElement('iframe');frame.srcdoc=first;
+        root.appendChild(frame);document.body.appendChild(host);frame.srcdoc=latest;
+        marker='ready';order.push('parent');
+        ({order:order.slice(),url:frame.contentDocument.URL,body:!!frame.contentDocument.body})""")
+    ctx.advance(0)
+    loaded=ctx.eval('[order,frame.contentDocument.body.textContent]')
+    ctx.eval("frame.src='/unused.html';void 0")
+    ctx.advance(0)
+    unchanged=ctx.eval('order')
+    ctx.eval("frame.removeAttribute('src');frame.removeAttribute('srcdoc')")
+    ctx.advance(0)
+    blank=ctx.eval('[frame.contentDocument.URL,frame.contentDocument.body.innerHTML]')
+    print(json.dumps(dict(before=before,loaded=loaded,unchanged=unchanged,blank=blank,
+                         requests=ctx.net_log(),root=str(get_runtime_path()))))
+''', None)
+        self.assertEqual(result['before'], {'order': ['parent'], 'url': 'about:blank', 'body': True})
+        self.assertEqual(result['loaded'], [['parent', 'ready'], 'child'])
+        self.assertEqual(result['unchanged'], ['parent', 'ready'])
+        self.assertEqual(result['blank'], ['about:blank', ''])
+        self.assertEqual(result['requests'], [])
+        self.assertNotIn('/root/ff-ruyijs', result['root'])
+
     def test_installed_h3_and_helper_isolation(self):
         fixture=Fixture()
         try:

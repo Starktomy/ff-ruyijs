@@ -13,9 +13,9 @@
 
 namespace ruyijs {
 namespace {
-// A frame navigation task uses the same shape (Url set), so the parent's
+// A frame navigation task uses the same shape (NavigationSource set), so the parent's
 // completion reads it as the child's pending token through CompletionPending.
-enum Slot { Loader, Page, Document, Generation, Frame, Done, Callback, Url, Count };
+enum Slot { Loader, Page, Document, Generation, Frame, Done, Callback, NavigationSource, InlineDocument, Count };
 const JSClass kCompletion = {"Document completion task", JSCLASS_HAS_RESERVED_SLOTS(Count)};
 bool CompletionPending(JSContext* cx, JS::HandleObject task, execution_scheduling::Realm& scheduling) {
   if (JS::GetReservedSlot(task, Done).toBoolean()) return false;
@@ -101,13 +101,14 @@ bool PageLoad::Complete(JS::HandleObject task) {
   return !frame || document.ScriptGeneration() != generation ||
          scheduling_.Retired(page) || FireFrameElementLoad(*target);
 }
-bool PageLoad::QueueFrameLoad(BrowsingContext& target, const std::string& url) {
+bool PageLoad::QueueFrameLoad(BrowsingContext& target, const std::string& source,
+                               bool inlineDocument) {
   JSAutoRealm realm(cx_, target.page);
   JS::RootedObject task(cx_, JS_NewObjectWithGivenProto(cx_, &kCompletion, nullptr));
   JS::RootedFunction fn(cx_, js::NewFunctionWithReserved(cx_, DeliverFrameLoad, 0, 0,
                                                        "Frame navigation task"));
-  JS::RootedString href(cx_, JS_NewStringCopyUTF8N(cx_, JS::UTF8Chars(url.data(), url.size())));
-  if (!task || !fn || !href) return false;
+  JS::RootedString text(cx_, JS_NewStringCopyUTF8N(cx_, JS::UTF8Chars(source.data(), source.size())));
+  if (!task || !fn || !text) return false;
   JS::RootedObject callback(cx_, JS_GetFunctionObject(fn));
   JS::SetReservedSlot(task, Loader, JS::PrivateValue(this));
   JS::SetReservedSlot(task, Page, JS::ObjectValue(*target.page));
@@ -116,7 +117,8 @@ bool PageLoad::QueueFrameLoad(BrowsingContext& target, const std::string& url) {
   JS::SetReservedSlot(task, Frame, JS::BooleanValue(true));
   JS::SetReservedSlot(task, Done, JS::BooleanValue(false));
   JS::SetReservedSlot(task, Callback, JS::ObjectValue(*callback));
-  JS::SetReservedSlot(task, Url, JS::StringValue(href));
+  JS::SetReservedSlot(task, NavigationSource, JS::StringValue(text));
+  JS::SetReservedSlot(task, InlineDocument, JS::BooleanValue(inlineDocument));
   js::SetFunctionNativeReserved(callback, 0, JS::ObjectValue(*task));
   if (!scheduling_.PostTask(callback)) return false;
   target.loadCompletion = task;
@@ -137,12 +139,16 @@ bool PageLoad::RunFrameLoad(JS::HandleObject task) {
   BrowsingContext* target = Find(document);
   if (!target || !frames_.Live(*target) || target->loadCompletion.get() != task) return true;
   JS::SetReservedSlot(task, Done, JS::BooleanValue(true));
-  JS::RootedString href(cx_, JS::GetReservedSlot(task, Url).toString());
-  std::string url;
-  if (!ToUTF8(cx_, href, &url)) return false;
+  JS::RootedString text(cx_, JS::GetReservedSlot(task, NavigationSource).toString());
+  std::string source;
+  if (!ToUTF8(cx_, text, &source)) return false;
   // As before, a child document that cannot load does not fail the task queue
   // (Firefox reports an element `error`, D8).
-  if (!LoadFrame(*target, url)) JS_ClearPendingException(cx_);
+  const bool inlineDocument = JS::GetReservedSlot(task, InlineDocument).toBoolean();
+  const bool loaded = inlineDocument ? LoadFrameMarkup(*target, source, true)
+      : source == "about:blank" ? LoadFrameMarkup(*target, "", false)
+      : LoadFrame(*target, source);
+  if (!loaded) JS_ClearPendingException(cx_);
   return true;
 }
 bool PageLoad::WaitForCompletion(JS::HandleObject task) {

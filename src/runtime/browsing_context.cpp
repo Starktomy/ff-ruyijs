@@ -649,15 +649,16 @@ bool Frames::LoadChild(BrowsingContext& parent, BrowsingContext& child,
   *loaded = false;
   if (reference.empty() || !load_) return true;
   // The reference is resolved against the parent document's URL through the
-  // one resource resolver, and only an absolute HTTP(S) target is fetched by
-  // the one coordinator (same scheme rule as the top-level Location).
+  // one resource resolver. HTTP(S) is fetched by the one coordinator;
+  // about:blank is an inline empty document with no network request.
   JS::RootedValue href(cx_);
   if (!parent.environment->URL(&href) || !href.isString()) return true;
   JS::RootedString text(cx_, href.toString());
   std::string base, url;
   if (!ToUTF8(cx_, text, &base) || !resource_network::ResolveURL(base, reference, &url))
     return true;
-  if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) return true;
+  if (url != "about:blank" && url.rfind("http://", 0) != 0 &&
+      url.rfind("https://", 0) != 0) return true;
   *loaded = true;
   if (!load_(loadContext_, child, url)) {
     // A child document that cannot load does not break the document that
@@ -800,8 +801,13 @@ bool Frames::Navigate(void* context, JS::HandleObject element, document_model::N
     if (inline_document) return self.LoadChildHtml(target, srcdoc);
     std::string reference;
     bool loaded = false;
-    if (!FrameSource(parent, element, &reference) ||
-        !self.LoadChild(parent, target, reference, &loaded)) return false;
+    if (!FrameSource(parent, element, &reference)) return false;
+    if (initial && (reference.empty() || reference == "about:blank"))
+      return self.CompleteBlank(target);
+    // Removing the last source navigates away from any previous srcdoc,
+    // and replaces a still-pending inline task with an empty document.
+    if (reference.empty()) reference = "about:blank";
+    if (!self.LoadChild(parent, target, reference, &loaded)) return false;
     // A first load without a target keeps the about:blank document, which
     // completes during insertion (Firefox fires the element `load` there).
     return loaded || !initial || self.CompleteBlank(target);

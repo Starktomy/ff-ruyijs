@@ -122,9 +122,15 @@ void SourceChanged(void* context, DocumentId document, NodeKey key, DomStringVie
   if (name == DomStringView(u"src")) QueueImageSource(state, key);
   if (namespace_uri.empty()) CanvasDimensionChanged(state, key, name);
   if (namespace_uri.empty()) CustomElementAttributeChanged(state, key, name, old);
-  if (document != state.main.document) return;
+  if (document != state.main.document || !namespace_uri.empty()) return;
   if (name != DomStringView(u"src") && name != DomStringView(u"srcdoc")) return;
   if (!state.frameNavigate || !FindFrame(state, key)) return;
+  // A present srcdoc owns the document; changing its fallback src does
+  // not start another navigation, even when the inline markup is empty.
+  if (name == DomStringView(u"src")) {
+    std::optional<DomString> srcdoc;
+    if (!state.Check(state.model.GetAttribute(key, u"srcdoc", &srcdoc)) || srcdoc) return;
+  }
   JS::RootedValue value(state.cx);
   if (!state.Wrap(key, &value) || !value.isObject()) return;
   JS::RootedObject element(state.cx, &value.toObject());

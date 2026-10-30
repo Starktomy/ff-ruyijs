@@ -98,11 +98,12 @@ class PageLoad final {
   // child's scripts start on their own stack. The queued task is the child's
   // completion token, so the parent's `load` waits for it; a newer load of the
   // same frame or the frame's retirement makes it do nothing.
-  bool QueueFrameLoad(BrowsingContext& target, const std::string& url);
-  // The same load path with the markup handed in directly, for an iframe
-  // `srcdoc` document: the child commits `about:srcdoc` (origin inherited from
-  // its creator) and the one parser produces the inline document.
-  bool LoadFrameHtml(BrowsingContext& target, const std::string& html);
+  // Inline srcdoc markup uses the same queue and supersession token as src.
+  bool QueueFrameLoad(BrowsingContext& target, const std::string& source,
+                      bool inlineDocument = false);
+  // Inline frame documents use the same parser and inherited creator
+  // policies. srcdoc commits about:srcdoc; a reset commits about:blank.
+  bool LoadFrameMarkup(BrowsingContext& target, const std::string& html, bool srcdoc);
   // A newly connected frame whose first load has no target keeps its
   // about:blank document; this completes it by firing the frame element's
   // `load`, as Firefox does during insertion.

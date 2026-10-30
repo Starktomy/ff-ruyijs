@@ -313,7 +313,7 @@ bool Run(JSContext* cx, js::cli::OptionParser* options, Checkpoint checkpoint) {
     return static_cast<PageLoad*>(context)->QueueFrameLoad(target, url);
   }, &pageLoad);
   frames->SetLoadHtmlPort([](void* context, BrowsingContext& target, const std::string& html) {
-    return static_cast<PageLoad*>(context)->LoadFrameHtml(target, html);
+    return static_cast<PageLoad*>(context)->QueueFrameLoad(target, html, true);
   }, &pageLoad);
   frames->SetBlankPort([](void* context, BrowsingContext& target) {
     return static_cast<PageLoad*>(context)->CompleteBlankFrame(target);

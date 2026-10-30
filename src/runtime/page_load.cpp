@@ -233,11 +233,9 @@ bool PageLoad::LoadFrame(BrowsingContext& target, const std::string& url,
   JS::RootedObject completion(owners.cx);
   return Produce(owners, markup, &ignored, &executed, true, &completion);
 }
-// An iframe `srcdoc` load: the inline markup reaches the same parser without a
-// resource request, and the child commits `about:srcdoc` so its Location and
-// document URL report the inline document while its origin stays the
-// creator's.
-bool PageLoad::LoadFrameHtml(BrowsingContext& target, const std::string& html) {
+// Inline frame markup reaches the same parser without a resource request.
+// Both srcdoc and about:blank inherit their creator's origin and policies.
+bool PageLoad::LoadFrameMarkup(BrowsingContext& target, const std::string& html, bool srcdoc) {
   if (depth_ >= kMaxNavigationDepth) {
     JS_ReportErrorASCII(cx_, "navigation nesting limit exceeded");
     return false;
@@ -246,11 +244,11 @@ bool PageLoad::LoadFrameHtml(BrowsingContext& target, const std::string& html) {
   Owners owners{cx_, target.page, *target.environment, *target.document, *target.interaction,
                 target.resources->Resources(), *target.platform};
   JSAutoRealm realm(owners.cx, owners.page);
-  if (!owners.environment.SetFrameLocation("about:srcdoc")) return false;
+  if (!owners.environment.SetFrameLocation(srcdoc ? "about:srcdoc" : "about:blank")) return false;
   // The child document's secure-context surface follows its committed URL.
   if (!ConfigureSecureExposure(target)) return false;
   if (!owners.environment.CommitAgentCluster("")) return false;
-  // An about:srcdoc document inherits its creator's policies.
+  // Inline srcdoc and blank documents inherit their creator's policies.
   if (target.security) {
     target.security->Reset();
     if (target.parent && target.parent->security) target.security->InheritFrom(*target.parent->security);
