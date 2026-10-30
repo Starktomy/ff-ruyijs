@@ -58,10 +58,9 @@ bool Configure(Tls* t, const Profile& p, const char* host, const char* peer, boo
 extern "C" {
 int necko_tls_open_profile(const char* host, const char* peer, int h2, const Profile* profile,
     Read read, Write write, Idle idle, Verify verify, Decode decode, void* user,
-    const char*, uint32_t cert_len, const char*, uint32_t key_len, void** output) {
+    const char* cert, uint32_t cert_len, const char* key, uint32_t key_len, void** output) {
   if (!output || !profile || !host || !peer || !read || !write || !verify) return -1;
   *output = nullptr; tls_error.clear();
-  if (cert_len || key_len) { tls_error = "Client certificate import is not implemented by the Linux NSS adapter"; return -1; }
   if (!Initialize()) return TlsStatus(-1);
   auto tls = std::make_unique<Tls>();
   tls->read = read; tls->write = write; tls->idle = idle; tls->verify = verify; tls->decode = decode; tls->user = user;
@@ -70,6 +69,7 @@ int necko_tls_open_profile(const char* host, const char* peer, int h2, const Pro
   if (!layer) return TlsStatus(-1);
   tls->fd = SSL_ImportFD(nullptr, layer);
   if (!tls->fd) { PR_Close(layer); return TlsStatus(-1); }
+  if (!ImportClientIdentity(tls.get(), cert, cert_len, key, key_len)) return TlsStatus(-1);
   if (!Configure(tls.get(), *profile, host, peer, h2) || SSL_ForceHandshake(tls->fd) != SECSuccess ||
       SSL_GetChannelInfo(tls->fd, &tls->info, sizeof(tls->info)) != SECSuccess) return TlsStatus(-1);
   unsigned char protocol[256]; unsigned int length = 0; SSLNextProtoState state;

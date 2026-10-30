@@ -5,6 +5,7 @@ serves requests in order over the same pipes until its input closes, keeping one
 adapter so connections are reused per origin, as Firefox's connection manager
 reuses them (docs/NECKO_TRANSPORT.md, ARCHITECTURE "Necko 会话传输").
 """
+import json
 import os
 import struct
 import sys
@@ -96,7 +97,8 @@ def serve(adapter, method, url, headers, body):
     # retaining the same certificate and hostname verification path.
     verify = os.environ.get("RUYIJS_TLS_CA_FILE") or True
     reader = open_response(adapter, prepared, control,
-                           timeout=(BUDGET, READ), verify=verify, proxies=transport_proxies())
+                           timeout=(BUDGET, READ), verify=verify, proxies=transport_proxies(),
+                           cert=json.loads(os.environ.get("RUYIJS_TLS_CLIENT_CERT", "null")))
     chunks, total = [], 0
     try:
         for chunk in reader:

@@ -2,13 +2,18 @@
 #include "tls_io.h"
 #include <ssl.h>
 #include <cert.h>
+#include <keyhi.h>
 #include <prerror.h>
 #include <prmem.h>
 #include <prnetdb.h>
 #include <vector>
 thread_local Tls* active_tls = nullptr;
 thread_local std::string tls_error;
-Tls::~Tls() { if (fd) PR_Close(fd); }
+Tls::~Tls() {
+  if (fd) PR_Close(fd);
+  if (client_key) SECKEY_DestroyPrivateKey(client_key);
+  for (auto* cert : client_chain) CERT_DestroyCertificate(cert);
+}
 int TlsStatus(int status) {
   if (status >= 0) return 0;
   const auto error = PR_GetError();

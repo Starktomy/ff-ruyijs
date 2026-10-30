@@ -1,6 +1,8 @@
 """Offline TLS/H1/H2 acceptance probe, run by the private transport Python."""
 import datetime
 import gzip
+import os
+import sys
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 import socketserver
@@ -114,6 +116,16 @@ class Tests(unittest.TestCase):
                 .add_extension(x509.KeyUsage(True, False, True, False, False, False, False, False, False), True)
                 .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), False)
                 .sign(key, hashes.SHA256()))
+        client_key = rsa.generate_private_key(65537, 2048)
+        client = (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "native-client")]))
+                  .issuer_name(subject).public_key(client_key.public_key()).serial_number(x509.random_serial_number())
+                  .not_valid_before(now - datetime.timedelta(days=1)).not_valid_after(now + datetime.timedelta(days=1))
+                  .add_extension(x509.BasicConstraints(ca=False, path_length=None), True)
+                  .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), False)
+                  .sign(key, hashes.SHA256()))
+        (cls.directory / "client.pem").write_bytes(client.public_bytes(serialization.Encoding.PEM) + ca.public_bytes(serialization.Encoding.PEM))
+        (cls.directory / "client-key.pem").write_bytes(client_key.private_bytes(serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         cls.ca = cls.directory / "ca.pem"
         cls.ca.write_bytes(ca.public_bytes(serialization.Encoding.PEM))
         (cls.directory / "cert.pem").write_bytes(leaf.public_bytes(serialization.Encoding.PEM))
@@ -186,6 +198,42 @@ class Tests(unittest.TestCase):
                 response = self.request()
                 self.assertEqual(response.content, b"native-nss:")
                 self.assertEqual(response.tls["profile"], f"firefox-{version}")
+
+    def test_client_certificate_h1_h2(self):
+        self.server.tls.verify_mode = ssl.CERT_REQUIRED
+        self.server.tls.load_verify_locations(self.ca)
+        for alpn in (["http/1.1"], ["h2", "http/1.1"]):
+            with self.subTest(alpn=alpn):
+                self.adapter.close()
+                self.adapter = HTTPAdapter(firefox="159")
+                self.server.tls.set_alpn_protocols(alpn)
+                response = self.request(cert=(str(self.directory / "client.pem"), str(self.directory / "client-key.pem")))
+                self.assertEqual(response.content, b"native-nss:")
+                self.assertEqual(response.tls["alpn"], alpn[0])
+
+    def test_client_certificate_required_and_mismatched_key(self):
+        self.server.tls.verify_mode = ssl.CERT_REQUIRED
+        self.server.tls.load_verify_locations(self.ca)
+        with self.assertRaises((SSLError, OSError)):
+            self.request()
+        with self.assertRaises(SSLError):
+            self.request(cert=(str(self.directory / "client.pem"), str(self.directory / "key.pem")))
+
+    def test_context_client_certificate(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+        from ruyijs import Context
+        self.server.tls.verify_mode = ssl.CERT_REQUIRED
+        self.server.tls.load_verify_locations(self.ca)
+        self.server.tls.set_alpn_protocols(["h2", "http/1.1"])
+        previous = os.environ.get("RUYIJS_TLS_CA_FILE")
+        os.environ["RUYIJS_TLS_CA_FILE"] = str(self.ca)
+        try:
+            with Context(cert=(self.directory / "client.pem", self.directory / "client-key.pem"), timeout=15) as ctx:
+                ctx.navigate(self.url)
+                self.assertIn("native-nss:", ctx.eval("document.body.textContent"))
+        finally:
+            if previous is None: os.environ.pop("RUYIJS_TLS_CA_FILE", None)
+            else: os.environ["RUYIJS_TLS_CA_FILE"] = previous
 
     def test_bounded_decoder(self):
         self.server.tls.set_alpn_protocols(["http/1.1"])

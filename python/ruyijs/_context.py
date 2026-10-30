@@ -91,12 +91,14 @@ class Context(EnvironmentControl, SchedulingControl, RandomControl, ResourceCont
     ``tls`` selects the Firefox release (100-159, e.g. ``"120"`` or ``120``)
     whose TLS ClientHello, HTTP/2 settings and HTTP/3 priorities this context's
     Necko transport sends. None keeps Firefox 159 (or NECKO_FIREFOX if set).
+    ``cert`` is a PEM client identity path or (chain_path, key_path) pair.
+    Keys must be unencrypted; native NSS supports H1/H2 client authentication.
     It changes the network fingerprint only; pair it with a matching
     ``configure_fingerprint`` user agent when the page should agree.
     """
 
     def __init__(self, shell=None, timeout=10.0, environment=None, mode="default", proxy=None,
-                 tls=None):
+                 tls=None, cert=None):
         if not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("timeout must be a finite positive number")
         self.timeout = float(timeout)
@@ -106,6 +108,13 @@ class Context(EnvironmentControl, SchedulingControl, RandomControl, ResourceCont
             raise TypeError("proxy must be a URL string or None")
         if proxy and any(c in proxy for c in "\x00\r\n"):
             raise ValueError("proxy URL contains invalid characters")
+        if cert is not None:
+            paths = cert if isinstance(cert, (tuple, list)) else (cert, cert)
+            if len(paths) != 2 or any(not isinstance(p, (str, os.PathLike)) for p in paths):
+                raise TypeError("cert must be a PEM path or (certificate, private_key) pair")
+            cert = [str(Path(p).resolve(strict=True)) for p in paths]
+            if any(not Path(p).is_file() for p in cert):
+                raise ValueError("Client certificate and key must be regular files")
         tls_version = _tls_version(tls)
         selected = shell or os.environ.get("RUYIJS_SHELL")
         self.shell = (Path(selected).resolve() if selected else
@@ -129,6 +138,10 @@ class Context(EnvironmentControl, SchedulingControl, RandomControl, ResourceCont
                 self.transport = "libcurl"
                 if tls_version is not None:
                     raise NotImplementedError("Firefox TLS profiles require the native Necko/NSS helper; run tools/build_necko_linux.py")
+        if cert is not None:
+            if self.transport != "standalone-necko+nss":
+                raise NotImplementedError("Client certificates require the Necko/NSS helper")
+            child_environment["RUYIJS_TLS_CLIENT_CERT"] = json.dumps(cert)
         child_environment["RUYIJS_HTTP_PROXY"] = proxy or ""
         if tls_version is not None:
             # The Necko child inherits this and builds its TLS profile from it.
