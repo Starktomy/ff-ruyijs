@@ -7,6 +7,36 @@ _TYPED = object()
 
 
 class EvaluationControl:
+    def eval_many(self, codes, filename="<eval_many>", line=-1, col=-1,
+                  to_py=_TYPED):
+        """Run up to 4096 scripts in order in one RPC, returning each result.
+
+        Each script keeps global script scope and a microtask checkpoint; typed
+        results are snapshotted before the next script. The first error stops
+        the batch and raises JSError; earlier side effects remain. The normal
+        Context timeout and frame limit apply to the whole batch.
+        """
+        if not isinstance(codes, (list, tuple)):
+            raise TypeError("codes must be a list or tuple of scripts")
+        if len(codes) > 4096:
+            raise ValueError("batch exceeds 4096 scripts")
+        codes = [source_text(code, "code") for code in codes]
+        filename = source_text(filename, "filename")
+        line, col = source_offset(line, "line"), source_offset(col, "col")
+        if "\0" in filename:
+            raise ValueError("filename must not contain NUL")
+        if to_py is not _TYPED and type(to_py) is not bool:
+            raise TypeError("to_py must be a boolean")
+        self._callbacks.guard()
+        with self._lock:
+            self._flush_host_releases()
+            fields = dict(codes=codes, filename=filename, line=line, col=col)
+            if to_py is not _TYPED:
+                fields.update(result_mode="public", to_py=to_py)
+            packets = self._request("eval_many", **fields)
+            return (packets if to_py is _TYPED else
+                    [decode_public(self, packet) for packet in packets])
+
     def eval(self, code, filename="<eval>", line=-1, col=-1, to_py=_TYPED,
              devtools=True, *, name=_TYPED):
         """Evaluate code; explicit to_py selects ruyijs's public value conversion.

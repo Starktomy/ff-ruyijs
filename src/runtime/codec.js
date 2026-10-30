@@ -3,7 +3,8 @@
   "use strict";
   const maxDepth = 64;
   const maxNodes = 100000;
-  function encode(input, extra = 0) {
+  const encodedBatches = new WeakSet();
+  function encode(input, extra = 0, usage = null) {
     let nodes = 0;
     // Reserve envelope space before creating an encoded tree/JSON string.
     let remaining = 16 * 1024 * 1024 - 65536 - extra;
@@ -71,14 +72,32 @@
       active.delete(value);
       return result;
     }
-    return visit(input, 0);
+    const result = visit(input, 0);
+    if (usage) { usage.used = 16 * 1024 * 1024 - 65536 - extra - remaining; usage.nodes = nodes; }
+    return result;
   }
   return {
+    snapshot(value, budget) {
+      const usage = {};
+      const result = encode(value, budget.used, usage);
+      budget.used += usage.used;
+      budget.nodes = (budget.nodes || 0) + usage.nodes;
+      if (budget.nodes > maxNodes) throw new RangeError("Batch exceeds protocol traversal limit");
+      return result;
+    },
+    batch(value) {
+      encodedBatches.add(value);
+      return value;
+    },
     callback(callId, name, args) {
       return JSON.stringify({event: "callback", callId, name,
         args: encode(args, name.length * 6)});
     },
     reply(id, ok, value) {
+      if (ok && encodedBatches.has(value)) {
+        encodedBatches.delete(value);
+        return JSON.stringify({id, ok, value: {type: "array", value}});
+      }
       return JSON.stringify(ok ? {id, ok, value: encode(value,
         typeof id === "string" ? id.length * 6 : 0)} :
         {id, ok, error: value});

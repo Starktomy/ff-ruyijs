@@ -70,7 +70,7 @@ bool Serve(JSContext* cx, TopLevel& top,
       success = false;
     }
     if (success) success = StringProperty(cx, request, "op", &operation);
-    if (success && (operation == "eval" || operation == "set" || operation == "expose" ||
+    if (success && (operation == "eval" || operation == "eval_many" || operation == "set" || operation == "expose" ||
                     operation == "expose_data" || operation == "native" || operation == "page" || operation == "input" || operation == "user" ||
                     operation == "locals")) {
       environment.Freeze();
@@ -78,6 +78,8 @@ bool Serve(JSContext* cx, TopLevel& top,
     }
     if (success && operation == "eval") {
       if (!EvalRequest(cx, page, request, hostValues, checkpoint, &value, &success)) return false;
+    } else if (success && operation == "eval_many") {
+      if (!EvalBatchRequest(cx, top, codec, request, hostValues, checkpoint, errors, &value, &success)) return false;
     } else if(success && operation=="locals") {
       JS::RootedValue global(cx, JS::ObjectValue(*page));
       success=hostValues.Encode(global,false,&value);

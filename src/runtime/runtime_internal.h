@@ -16,6 +16,9 @@ class TopLevel;
 bool EvalRequest(JSContext* cx, JS::HandleObject page, JS::HandleObject request,
                  HostValues& values, Checkpoint checkpoint,
                  JS::MutableHandleValue result, bool* success);
+bool EvalBatchRequest(JSContext*, TopLevel&, JS::HandleObject codec, JS::HandleObject request,
+                      HostValues&, Checkpoint, ExceptionCapture&,
+                      JS::MutableHandleValue result, bool* success);
 // Every request reads the active top-level document's global from `top`; a
 // cross-document navigation between requests moves later ones to the new one.
 bool Serve(JSContext* cx, TopLevel& top, JS::HandleObject codec,
