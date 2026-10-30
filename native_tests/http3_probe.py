@@ -28,10 +28,10 @@ class Tests(unittest.TestCase):
     def tearDown(self):
         self.adapter.close()
 
-    def direct(self, host="localhost", verify=None):
+    def direct(self, host="localhost", verify=None, firefox="159"):
         library = self.adapter.library._name
         return Connection(host, self.fixture.port, TLSContext(str(verify or self.fixture.ca), None),
-            library, 4, endpoint=("127.0.0.1", self.fixture.port), firefox="159")
+            library, 4, endpoint=("127.0.0.1", self.fixture.port), firefox=firefox)
 
     def test_direct_h3_tls_binary_post_and_large_response(self):
         connection = self.direct()
@@ -57,6 +57,37 @@ class Tests(unittest.TestCase):
         self.assertFalse(connection._thread.is_alive())
         self.assertIsNone(connection._wake_read)
         self.assertIsNone(connection._ruyijs_retained_udp)
+
+    def test_legacy_profiles_use_native_quic(self):
+        for version in ("100", "105", "106", "120", "124", "138", "139"):
+            with self.subTest(firefox=version):
+                connection = self.direct(firefox=version)
+                try:
+                    self.assertEqual(connection.info['alpn'], 'h3')
+                    self.assertEqual(connection.info['profile'], 'firefox-'+version)
+                    ids = self.fixture.parameters[-1]
+                    if int(version) <= 105:
+                        self.assertNotIn(0x11, ids)
+                        self.assertNotIn(0xff73db, ids)
+                    elif int(version) < 124:
+                        self.assertIn(0xff73db, ids)
+                        self.assertNotIn(0x11, ids)
+                    else:
+                        self.assertIn(0x11, ids)
+                    exchange = Exchange(connection, "GET", f"https://localhost:{self.fixture.port}/echo",
+                        {"Host": f"localhost:{self.fixture.port}"}, False, timeout=4)
+                    exchange.receive()
+                    self.assertEqual(exchange.read(65536), b"native-http3:")
+                    exchange.close()
+                finally: connection.close()
+
+    def test_legacy_parameter_order_is_randomized(self):
+        orders = set()
+        for _ in range(4):
+            connection = self.direct(firefox="138")
+            orders.add(tuple(self.fixture.parameters[-1]))
+            connection.close()
+        self.assertGreater(len(orders), 1)
 
     def test_alt_svc_upgrade_and_pool_reuse(self):
         url = self.fixture.url

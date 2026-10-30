@@ -3,6 +3,7 @@
 mod client;
 mod crypto;
 mod events;
+mod webtransport;
 
 use std::{cell::RefCell, collections::HashMap, ffi::{CString, c_char}, panic::{catch_unwind, AssertUnwindSafe},
     sync::atomic::{AtomicU64, Ordering}};

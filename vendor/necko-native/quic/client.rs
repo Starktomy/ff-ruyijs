@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::VecDeque, io::ErrorKind, net::{SocketAddr, UdpSocket},
+use std::{cell::RefCell, collections::{VecDeque, HashMap}, io::ErrorKind, net::{SocketAddr, UdpSocket},
     os::fd::{FromRawFd, RawFd}, rc::Rc, time::{Duration, Instant}};
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use neqo_common::{Datagram, Header, Tos};
@@ -13,7 +13,9 @@ pub struct Session {
     pub local: SocketAddr,
     pub remote: SocketAddr,
     pub firefox: String,
+    pub sent_bytes: u64,
     pending: VecDeque<Vec<u8>>,
+    pub wt_closed: HashMap<u64, Value>,
 }
 impl Session {
     pub fn new(v: &Value) -> Result<Self> {
@@ -21,12 +23,7 @@ impl Session {
         let local: SocketAddr = text(v, "local")?.parse().map_err(err)?;
         let remote: SocketAddr = text(v, "remote")?.parse().map_err(err)?;
         let p = &v["profile"];
-        if v["webtransport"].as_bool().unwrap_or(false) {
-            return Err("WebTransport is not implemented by the Linux QUIC bridge".into());
-        }
-        if p["tp_style"].as_u64().unwrap_or(0) != 0 {
-            return Err("Legacy QUIC parameter ordering is unavailable; use the TCP route".into());
-        }
+        let wt = v["webtransport"].as_bool().unwrap_or(false);
         let max_streams = p["max_streams"].as_u64().unwrap_or(100).min(100);
         let mut params = ConnectionParameters::default()
             .max_streams(StreamType::BiDi, max_streams).max_streams(StreamType::UniDi, max_streams)
@@ -41,16 +38,20 @@ impl Session {
         }
         let http3 = Http3Parameters::default().connection_parameters(params.clone())
             .max_table_size_encoder(65536).max_table_size_decoder(65536).max_blocked_streams(20)
-            .http3_datagram(p["h3_datagram"].as_bool().unwrap_or(false));
+            .http3_datagram(wt || p["h3_datagram"].as_bool().unwrap_or(false))
+            .webtransport(wt).connect(wt);
         let mut connection = Connection::new_client(text(v,"host")?, &["h3"],
             Rc::new(RefCell::new(RandomConnectionIdGenerator::new(3))), local, remote, params, Instant::now()).map_err(err)?;
+        let style = p["tp_style"].as_u64().unwrap_or(0);
+        if style > 3 { return Err("Unknown transport parameter style".into()); }
+        connection.standalone_tp_style(style as u8);
         crypto::configure(&mut connection, p)?;
         let mut client = Http3Client::new_with_conn(connection, http3);
         if p["grease_ech"].as_bool().unwrap_or(false) { client.enable_ech([]).map_err(err)?; }
         if let Some(token) = v["token"].as_str().filter(|s| !s.is_empty()) {
             client.enable_resumption(Instant::now(), B64.decode(token).map_err(err)?).map_err(err)?;
         }
-        Ok(Self {client, socket: None, local, remote, firefox: v["firefox"].as_str().unwrap_or("159").into(), pending: VecDeque::new()})
+        Ok(Self {client, socket: None, local, remote, firefox: v["firefox"].as_str().unwrap_or("159").into(), sent_bytes: 0, pending: VecDeque::new(), wt_closed: HashMap::new()})
     }
     pub fn close(&mut self) { self.client.close(Instant::now(), 0x100, "context closed"); let _ = self.pump(); }
     fn attach(&mut self, fd: u64) -> Result<Value> {
@@ -85,7 +86,7 @@ impl Session {
             }
             let bytes = self.pending.front().unwrap();
             match socket.send(bytes) {
-                Ok(n) if n == bytes.len() => { self.pending.pop_front(); },
+                Ok(n) if n == bytes.len() => { self.sent_bytes += n as u64; self.pending.pop_front(); },
                 Ok(_) => return Err("Partial UDP send".into()),
                 Err(e) if e.kind() == ErrorKind::WouldBlock => { delay = 0.001; break; },
                 Err(e) => return Err(e.to_string()),
@@ -96,6 +97,7 @@ impl Session {
     pub fn call(&mut self, op: &str, v: &Value) -> Result<Value> {
         let now = Instant::now();
         match op {
+            "webtransport" => crate::webtransport::call(self,v),
             "attach" => self.attach(number(v,"socket")?),
             "pump" => self.pump(),
             "events" => crate::events::collect(self),

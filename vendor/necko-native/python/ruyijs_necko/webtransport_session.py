@@ -1,4 +1,5 @@
 """WebTransport session projections using the original H3 Connection worker."""
+import os
 import base64
 from collections import deque
 from pathlib import Path
@@ -48,7 +49,7 @@ class Session:
         self.info = {}
         self.session = self.connection = None
         self._control = Endpoint()
-        context = Context(verify, None)
+        context = Context((os.environ.get("RUYIJS_TLS_CA_FILE") or True) if verify is True else verify, None)
         if hashes:
             from ruyijs_necko.webtransport_verify import HashContext
             context = HashContext(hashes)

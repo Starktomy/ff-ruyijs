@@ -6,6 +6,8 @@ import sys
 import threading
 from aioquic.asyncio import QuicConnectionProtocol, serve
 from aioquic.h3.connection import H3Connection
+from aioquic import tls
+from aioquic.buffer import Buffer
 from aioquic.h3.events import HeadersReceived, DataReceived
 from aioquic.quic.configuration import QuicConfiguration
 
@@ -52,6 +54,20 @@ class Fixture:
         self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
         self.thread.start()
         self.paths = []
+        self.parameters = []
+        self._pull_hello = tls.pull_client_hello
+        def pull_hello(buf):
+            hello = self._pull_hello(buf)
+            for kind, value in hello.other_extensions:
+                if kind == 0x39:
+                    wire = Buffer(data=value)
+                    ids = []
+                    while not wire.eof():
+                        ids.append(wire.pull_uint_var())
+                        wire.pull_bytes(wire.pull_uint_var())
+                    self.parameters.append(ids)
+            return hello
+        tls.pull_client_hello = pull_hello
         self.server = asyncio.run_coroutine_threadsafe(self.start(), self.loop).result(5)
         self.port = self.server._transport.get_extra_info("sockname")[1]
         self.tcp = Server(("127.0.0.1", 0), Handler)
@@ -81,4 +97,5 @@ class Fixture:
         self.tcp.shutdown()
         self.tcp.server_close()
         self.tcp_thread.join(2)
+        tls.pull_client_hello = self._pull_hello
         Certificates.tearDownClass()

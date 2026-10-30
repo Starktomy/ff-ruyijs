@@ -47,7 +47,53 @@ def prepare(root, firefox):
         '    pub fn standalone_tls_fd(&mut self) -> *mut std::ffi::c_void {\n'
         '        self.crypto.tls_mut().standalone_fd()\n    }\n\n'
         '    pub fn set_certificate_compression<', 1)
+    text = text.replace('    pub fn standalone_tls_fd(',
+        '    pub fn standalone_tp_style(&mut self, style: u8) {\n'
+        '        self.tps.borrow_mut().local_mut().standalone_wire_style = style;\n    }\n\n'
+        '    pub fn standalone_tls_fd(', 1)
     connection.write_text(text)
+    tparams = crates / "neqo-transport/src/tparams.rs"
+    text = (firefox / "third_party/rust/neqo-transport/src/tparams.rs").read_text()
+    text = text.replace('pub struct TransportParameters {',
+        'pub struct TransportParameters {\n    pub standalone_wire_style: u8,', 1)
+    old = """        for (i, v) in self.params.iter().filter(|(i, v)| f(*i, v.as_ref())) {
+            if let Some(tp) = v {
+                tp.encode(enc, i);
+            }
+        }"""
+    new = """        let mut entries: Vec<_> = self.params.iter()
+            .filter(|(i,v)| f(*i,v.as_ref()) && v.is_some()).collect();
+        if self.standalone_wire_style != 0 {
+            // NSS entropy; Fisher-Yates with rejection avoids modulo bias.
+            for end in (1..entries.len()).rev() {
+                let bound = (end + 1) as u64;
+                let limit = u64::MAX - u64::MAX % bound;
+                let index = loop {
+                    let value = u64::from_ne_bytes(random::<8>());
+                    if value < limit { break (value % bound) as usize; }
+                };
+                entries.swap(end,index);
+            }
+        }
+        for (i,v) in entries {
+            if i == TransportParameterId::VersionInformation {
+                if self.standalone_wire_style == 3 { continue; }
+                if self.standalone_wire_style == 2 {
+                    let mut entry = Encoder::default();
+                    v.as_ref().unwrap().encode(&mut entry,i);
+                    let mut decoded = Decoder::new(entry.as_ref());
+                    decoded.decode_varint();
+                    enc.encode_varint(0xff73db_u64);
+                    enc.encode(decoded.decode_remainder());
+                    continue;
+                }
+            }
+            v.as_ref().unwrap().encode(enc,i);
+        }"""
+    if old not in text:
+        raise ValueError("Neqo transport-parameter embedding anchor changed")
+    tparams.write_text(text.replace(old,new,1))
+
     source = root / "vendor/necko-native/quic"
     # Reuse Firefox's compatibility crates when its vendor inventory has moved
     # ahead of a transitive requirement (bindgen, toml, Windows-only crates).
