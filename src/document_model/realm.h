@@ -168,6 +168,16 @@ class Realm final {
   bool RunAutofocus();
   // The main document's active element (the focused element, else body).
   bool ActiveElement(JS::MutableHandleObject element);
+  // Finds the elements of this realm's document that match a CSS selector,
+  // descending into shadow roots, open and closed alike. A page keeps a closed
+  // shadow tree out of reach of its own script; this is the host's way in.
+  // The match at `index` is returned as a wrapped element, or null.
+  bool FindShadowElement(const std::string& selector, size_t index,
+                         JS::MutableHandleObject result);
+  // A host-side description of the document's elements, shadow trees
+  // included: one line per element as "tag#id.class[type=...]". The host
+  // uses it to see what a page keeps out of its own script's reach.
+  bool DescribeElements(std::string* out);
   // document.referrer of this realm's window document (the loading request's Referer).
   void SetDocumentReferrer(const std::string& referrer);
   // Page-load port for the shared runtime coordinator (runtime/page_load.cpp).

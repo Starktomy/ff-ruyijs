@@ -190,6 +190,16 @@ class Frames final {
   // True while `context` is the live context of its frame element: not yet
   // retired by the element leaving the tree.
   bool Live(const BrowsingContext& context) const;
+  // One tree's live contexts live in this one list, so a child's own children
+  // are found by their parent pointer. These are the live children of one
+  // parent, in creation order, the order their realms were made; a frame path
+  // addresses a child by this index.
+  std::vector<BrowsingContext*> ChildrenOf(const BrowsingContext* parent) const {
+    std::vector<BrowsingContext*> result;
+    for (const auto& child : children_)
+      if (child->parent == parent) result.push_back(child.get());
+    return result;
+  }
   // Borrow the original traversable owner; source identity may come from a
   // wrapper created in a retired realm and later adopted into a current one.
   void SetTopLevel(TopLevel* owner) { topLevel_ = owner; }

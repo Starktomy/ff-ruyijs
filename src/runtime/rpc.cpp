@@ -13,9 +13,12 @@
 #include "runtime/random_control.h"
 #include "runtime/input_control.h"
 #include "runtime/user_input.h"
+#include "runtime/frame_eval.h"
+#include "web_crypto/random_trace.h"
 #include "runtime/top_level.h"
 #include "jsapi.h"
 #include "js/Exception.h"
+#include "js/Array.h"
 #include "js/PropertyAndElement.h"
 #include "js/String.h"
 
@@ -72,6 +75,7 @@ bool Serve(JSContext* cx, TopLevel& top,
     if (success) success = StringProperty(cx, request, "op", &operation);
     if (success && (operation == "eval" || operation == "eval_many" || operation == "set" || operation == "expose" ||
                     operation == "expose_data" || operation == "native" || operation == "page" || operation == "input" || operation == "user" ||
+                    operation == "frame_eval" ||
                     operation == "locals")) {
       environment.Freeze();
       scheduling.Freeze();
@@ -155,10 +159,31 @@ bool Serve(JSContext* cx, TopLevel& top,
       success = pages.Request(request, &value);
       if (!success && !Failure(cx, &value)) return false;
     } else if (success && operation == "input") {
-      success = InputRequest(cx, page, request, scheduling, &value);
+      success = InputRequest(cx, top, page, request, scheduling, &value);
       if (!success && !Failure(cx, &value)) return false;
     } else if (success && operation == "user") {
       success = UserInputRequest(cx, top, request, scheduling, &value);
+    } else if (success && operation == "frame_eval") {
+      success = FrameEvalRequest(cx, top, request, hostValues, checkpoint, &value, &success);
+    } else if (success && operation == "frame_list") {
+      success = FrameListRequest(cx, top, checkpoint, &value);
+    } else if (success && operation == "frame_dump") {
+      success = FrameDumpRequest(cx, top, request, &value);
+    } else if (success && operation == "frame_rect") {
+      success = FrameRectRequest(cx, top, request, &value);
+    } else if (success && operation == "crypto_trace") {
+      const std::vector<std::string>& fills = web_crypto::RandomFills();
+      JS::RootedObject array(cx, JS::NewArrayObject(cx, fills.size()));
+      success = array != nullptr;
+      uint32_t index = 0;
+      for (const std::string& fill : fills) {
+        if (!success) break;
+        JS::RootedString text(cx, JS_NewStringCopyUTF8N(
+            cx, JS::UTF8Chars(fill.data(), fill.size())));
+        if (!text || !JS_DefineElement(cx, array, index++, text, JSPROP_ENUMERATE))
+          success = false;
+      }
+      if (success) value.setObject(*array);
       if (!success && !Failure(cx, &value)) return false;
     } else if (success && operation == "collect") {
       CollectGarbage(cx, &value);

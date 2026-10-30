@@ -6,6 +6,7 @@
 #include "runtime/runtime.h"
 #include "runtime/user_input_internal.h"
 #include "runtime/browsing_context.h"
+#include "runtime/frame_path.h"
 #include "runtime/resource_schema.h"
 #include "runtime/scheduling_control.h"
 #include "runtime/top_level.h"
@@ -93,16 +94,29 @@ bool Delay(JSContext* cx, JS::HandleObject request, const char* name, double* va
 
 bool UserInputRequest(JSContext* cx, TopLevel& top, JS::HandleObject request,
                       SchedulingControl& scheduling, JS::MutableHandleValue result) {
-  std::string action, text, key, expression;
+  std::string action, text, key, expression, frame, selector;
   double hold = 80, interval = 60;
-  bool hasTarget = false;
-  if (!resource_wire::Fields(cx, request, {"id", "op", "action", "target", "text", "key", "hold_ms", "interval_ms"}) ||
+  bool hasTarget = false, hasFrame = false, hasSelector = false;
+  if (!resource_wire::Fields(cx, request, {"id", "op", "action", "target", "text", "key", "hold_ms", "interval_ms", "frame", "selector"}) ||
       !resource_wire::Property(cx, request, "action", &action, 16, resource_wire::TextKind::ASCII) ||
       !JS_HasProperty(cx, request, "target", &hasTarget) ||
       (hasTarget && !resource_wire::Property(cx, request, "target", &expression, 65536)) ||
+      !JS_HasProperty(cx, request, "frame", &hasFrame) ||
+      (hasFrame && !resource_wire::Property(cx, request, "frame", &frame, 256, resource_wire::TextKind::ASCII)) ||
+      !JS_HasProperty(cx, request, "selector", &hasSelector) ||
+      (hasSelector && !resource_wire::Property(cx, request, "selector", &selector, 4096, resource_wire::TextKind::ASCII)) ||
       !Delay(cx, request, "hold_ms", &hold) || !Delay(cx, request, "interval_ms", &interval)) return false;
-  BrowsingContext& active = top.Active();
-  JSAutoRealm realm(cx, active.page);
+  // A frame path addresses a live child of the active document; the
+  // input then happens in that frame's realm, like a user clicking
+  // inside the frame.
+  BrowsingContext* active = &top.Active();
+  if (hasFrame && !frame.empty()) {
+    BrowsingContext* child = nullptr;
+    if (!ResolveFramePath(*active, frame, &child))
+      return resource_wire::Error(cx, "Frame path does not address a live child frame");
+    active = child;
+  }
+  JSAutoRealm realm(cx, active->page);
   JS::RootedObject target(cx);
   if (hasTarget) {
     JS::RootedString text(cx, JS_NewStringCopyUTF8N(cx, JS::UTF8Chars(expression.data(), expression.size())));
@@ -114,14 +128,23 @@ bool UserInputRequest(JSContext* cx, TopLevel& top, JS::HandleObject request,
     if (!value.isObject()) return resource_wire::Error(cx, "User input target is not an element");
     target = &value.toObject();
   }
+  if (!target && hasSelector) {
+    // A selector reaches an element the page keeps in a closed shadow tree,
+    // where the host's own script cannot look.
+    JS::RootedObject element(cx);
+    if (!active->document->FindShadowElement(selector, 0, &element))
+      return resource_wire::Error(cx, "Selector lookup failed");
+    if (!element) return resource_wire::Error(cx, "Selector matched no element");
+    target = element;
+  }
   scheduling.Freeze();
   if (action == "click") {
     if (!target) return resource_wire::Error(cx, "click needs a target");
-    if (!Click(cx, active, target, hold, scheduling)) return false;
+    if (!Click(cx, *active, target, hold, scheduling)) return false;
   } else if (action == "type" || action == "press") {
     if (target && !document_model::FocusElement(cx, target)) return false;
     JS::RootedObject focused(cx);
-    if (!active.document->ActiveElement(&focused)) return false;
+    if (!active->document->ActiveElement(&focused)) return false;
     if (!focused) return resource_wire::Error(cx, "No element has focus");
     if (action == "press") {
       if (!resource_wire::Property(cx, request, "key", &key, 32, resource_wire::TextKind::ASCII) ||
@@ -136,7 +159,7 @@ bool UserInputRequest(JSContext* cx, TopLevel& top, JS::HandleObject request,
       if (!JS_CopyStringChars(cx, mozilla::Range<char16_t>(chars.data(), chars.size()), string)) return false;
       for (size_t i = 0; i < chars.size(); ++i) {
         if (i) scheduling.Pass(interval);
-        if (!active.document->ActiveElement(&focused) || !focused) break;
+        if (!active->document->ActiveElement(&focused) || !focused) break;
         if (!user_input::Character(cx, focused, chars[i], scheduling)) return false;
       }
     }

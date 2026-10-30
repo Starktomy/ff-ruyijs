@@ -25,6 +25,17 @@ class RandomControl:
         with self._lock:
             return self._request('configure_crypto_replay', documents=documents)
 
+    def crypto_trace(self):
+        """Read the random fills this Context produced, newest last.
+
+        Each entry is the hexadecimal bytes of one getRandomValues call, in
+        the order the page asked for them. A page's session key is generated
+        inside the page, so this is where the host reads it.
+        """
+        self._callbacks.guard()
+        with self._lock:
+            return self._request("crypto_trace")
+
     def crypto_replay_status(self):
         """Read document binding and call-consumption counts without input bytes."""
         self._callbacks.guard()

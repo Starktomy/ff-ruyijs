@@ -1,5 +1,6 @@
 #include "web_crypto/subtle.h"
 #include "web_crypto/random_replay.h"
+#include "web_crypto/random_trace.h"
 #include "document_model/exception.h"
 #include "runtime/web_kit.h"
 #include "mozilla/RandomNum.h"
@@ -11,6 +12,25 @@
 #include <cstring>
 
 namespace ruyijs::web_crypto {
+namespace {
+// The recorded fills of this Context, newest last. One Context is one
+// process, so this state belongs to the process.
+constexpr size_t kMaxFills = 64;
+std::vector<std::string> gFills;
+}
+void RecordRandomFill(const uint8_t* data, size_t length) {
+  static const char digits[] = "0123456789abcdef";
+  std::string hex;
+  hex.reserve(length * 2);
+  for (size_t index = 0; index < length; ++index) {
+    hex.push_back(digits[data[index] >> 4]);
+    hex.push_back(digits[data[index] & 15]);
+  }
+  if (gFills.size() >= kMaxFills) gFills.erase(gFills.begin());
+  gFills.push_back(std::move(hex));
+}
+void ClearRandomFills() { gFills.clear(); }
+const std::vector<std::string>& RandomFills() { return gFills; }
 namespace {
 bool Error(JSContext* cx, const JS::CallArgs& args, const char* name, const char* message) {
   JS::RootedObject prototype(cx, &js::GetFunctionNativeReserved(&args.callee(), 1).toObject());
@@ -54,6 +74,11 @@ bool RandomValues(JSContext* cx, const JS::CallArgs& args, JS::HandleObject rece
     } else success = data && mozilla::GenerateRandomBytesFromOS(data, bytes);
   }
   if (!success) return Error(cx, args, "OperationError", "The operating system random generator failed");
+  if (bytes) {
+    JS::AutoCheckCannotGC nogc;
+    void* filled = JS_GetArrayBufferViewData(view, &shared, nogc);
+    if (filled) RecordRandomFill(static_cast<uint8_t*>(filled), bytes);
+  }
   if (replay) CommitRandomReplay(receiver);
   args.rval().set(args[0]);
   return true;

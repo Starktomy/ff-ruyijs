@@ -39,6 +39,30 @@ std::vector<NodeKey> CollectTagged(const domain::DocumentAggregate& owner, NodeK
 }
 }  // namespace
 
+Status Model::QuerySelectorOwned(NodeKey key, DomStringView text,
+                                  std::vector<NodeKey>* result) const noexcept {
+  Selector selector;
+  Status parsed = Selector::Parse(text, &selector);
+  if (parsed.code != ErrorCode::None) return parsed;
+  return Protect([&] {
+    const auto& owner = State().owner(key);
+    std::vector<uint64_t> found;
+    // The scope's own tree first, then every shadow root in it: a closed root
+    // hides its tree from the page's script, not from the host.
+    selector.Select(owner, key.node, &found);
+    for (uint64_t node : owner.owned_descendants(key.node, true)) {
+      const auto* element = owner.get_element(node);
+      if (!element) continue;
+      uint64_t shadow = element->shadow_root_id();
+      if (!shadow) continue;
+      selector.Select(owner, shadow, &found);
+    }
+    std::vector<NodeKey> output;
+    for (uint64_t node : found) output.push_back(Key(key.document, node));
+    result->swap(output);
+  });
+}
+
 Status Model::Links(NodeKey scope, std::vector<NodeKey>* result) const noexcept {
   return Protect([&] {
     std::vector<NodeKey> values = CollectTagged(State().owner(scope), scope, {u"a", u"area"}, u"href");

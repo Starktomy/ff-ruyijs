@@ -64,6 +64,71 @@ class EvaluationControl:
                                    result_mode="public", to_py=to_py, line=line, col=col)
             return decode_public(self, packet)
 
+    def eval_in_frame(self, code, frame, filename="<eval>", line=-1, col=-1, to_py=_TYPED):
+        """Evaluate code inside a child frame's realm.
+
+        frame addresses a live child frame of the active document ("0", "0/1");
+        the code runs in that frame's global, like a script of its own
+        document. The same options as eval() apply.
+        """
+        if not isinstance(frame, str) or not frame:
+            raise TypeError("frame must be a non-empty frame path")
+        code, filename = source_text(code, "code"), source_text(filename, "name")
+        line, col = source_offset(line, "line"), source_offset(col, "col")
+        if "\0" in filename:
+            raise ValueError("filename must not contain NUL")
+        if to_py is not _TYPED and type(to_py) is not bool:
+            raise TypeError("to_py must be a boolean")
+        self._callbacks.guard()
+        with self._lock:
+            self._flush_host_releases()
+            fields = dict(code=code, filename=filename, line=line, col=col, frame=frame)
+            if to_py is not _TYPED:
+                fields.update(result_mode="public", to_py=to_py)
+            packet = self._request("frame_eval", **fields)
+            return packet if to_py is _TYPED else decode_public(self, packet)
+
+    def element_rect(self, frame, selector):
+        """The box of one element of a child frame, as the layout measures it.
+
+        The lookup descends into shadow roots, so it reaches an element the
+        page's own script cannot see. The result carries x, y, width, height
+        and whether the element has a box at all.
+        """
+        if not isinstance(frame, str) or not frame:
+            raise TypeError("frame must be a non-empty frame path")
+        if not isinstance(selector, str) or not selector:
+            raise TypeError("selector must be a non-empty string")
+        self._callbacks.guard()
+        with self._lock:
+            self._flush_host_releases()
+            return self._request("frame_rect", frame=frame, selector=selector)
+
+    def dump_frame(self, frame):
+        """Describe the elements of a child frame, shadow trees included.
+
+        One line per element: the tag, then its id, class, type and name. The
+        lookup descends into shadow roots, so a page's closed shadow tree is
+        part of the description.
+        """
+        if not isinstance(frame, str) or not frame:
+            raise TypeError("frame must be a non-empty frame path")
+        self._callbacks.guard()
+        with self._lock:
+            self._flush_host_releases()
+            return self._request("frame_dump", frame=frame)
+
+    def frames(self):
+        """List the live child frames of the active document.
+
+        Each entry has the frame path, the frame's URL and nothing else; the
+        path addresses the frame in eval_in_frame() and in the input calls.
+        """
+        self._callbacks.guard()
+        with self._lock:
+            self._flush_host_releases()
+            return self._request("frame_list")
+
     @property
     def locals(self):
         """The original Window, including callable assignment and live members."""

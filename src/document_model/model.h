@@ -407,6 +407,11 @@ class Model final {
 
   Status QuerySelector(NodeKey root, DomStringView selector,
                        std::vector<NodeKey>* result) const noexcept;
+  // QuerySelectorOwned visits the owned descendants of the scope, descending
+  // into shadow roots, open and closed alike: a page keeps a closed shadow
+  // tree out of reach of its own script, and this is the host's way in.
+  Status QuerySelectorOwned(NodeKey root, DomStringView selector,
+                            std::vector<NodeKey>* result) const noexcept;
   Status AllNamed(NodeKey root, const DomStringView* name,
                   std::vector<NodeKey>* nodes, std::vector<DomString>* names) const noexcept;
   Status WindowNamed(NodeKey root, DomStringView name,
