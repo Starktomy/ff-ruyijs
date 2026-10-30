@@ -235,6 +235,29 @@ class Tests(unittest.TestCase):
             if previous is None: os.environ.pop("RUYIJS_TLS_CA_FILE", None)
             else: os.environ["RUYIJS_TLS_CA_FILE"] = previous
 
+    def test_default_trust_cache_reloads_changed_files(self):
+        from necko._nss import Context as TLSContext
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory)
+            roots=base/'firefox-roots.pem'
+            constraints=base/'firefox-root-constraints.json'
+            roots.write_bytes(self.ca.read_bytes());constraints.write_text('{}')
+            first=TLSContext(True,None,base);second=TLSContext(True,None,base)
+            self.assertIs(first.store,second.store)
+            first.constraints['private-change']='ignored'
+            self.assertNotIn('private-change',TLSContext(True,None,base).constraints)
+            roots.write_bytes(self.ca.read_bytes()*2)
+            changed=TLSContext(True,None,base)
+            self.assertIsNot(first.store,changed.store)
+            self.assertNotEqual(first.identity,changed.identity)
+            constraints.write_text('{"new-constraint":"260101000000Z"}')
+            self.assertIn('new-constraint',TLSContext(True,None,base).constraints)
+            # Explicit bundles retain their original reload-on-connection path.
+            explicit=TLSContext(str(roots),None)
+            roots.write_text('invalid certificate bundle')
+            with self.assertRaises(ValueError):TLSContext(str(roots),None)
+            self.assertIsNotNone(explicit.store)
+
     def test_bounded_decoder(self):
         self.server.tls.set_alpn_protocols(["http/1.1"])
         reader = open_response(self.adapter, Request("GET", self.url + "/gzip").prepare(),

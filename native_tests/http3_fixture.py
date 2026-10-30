@@ -21,6 +21,7 @@ class Protocol(QuicConnectionProtocol):
         self.http = H3Connection(self._quic)
         self.requests = {}
         self.owner = owner
+        self.owner.connections += 1
 
     def quic_event_received(self, event):
         for e in self.http.handle_event(event):
@@ -54,6 +55,7 @@ class Fixture:
         self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
         self.thread.start()
         self.paths = []
+        self.connections = 0
         self.parameters = []
         self._pull_hello = tls.pull_client_hello
         def pull_hello(buf):

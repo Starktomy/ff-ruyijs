@@ -142,6 +142,33 @@ class Tests(unittest.TestCase):
             else:
                 os.environ["RUYIJS_TLS_CA_FILE"] = old
 
+    def test_context_concurrent_h3_reuses_one_connection(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+        from ruyijs import Context
+        previous=os.environ.get("RUYIJS_TLS_CA_FILE")
+        os.environ["RUYIJS_TLS_CA_FILE"]=str(self.fixture.ca)
+        before=self.fixture.connections
+        try:
+            with Context(tls="159",timeout=15) as ctx:
+                ctx.navigate(self.fixture.url+"/bootstrap")
+                ctx.eval("""globalThis.manyH3=null;(async()=>{
+                    await(await fetch('/echo')).text();
+                    const values=await Promise.all(Array.from({length:6},(_,i)=>
+                        fetch('/echo',{method:'POST',body:'stream-'+i}).then(r=>r.text())));
+                    manyH3={values,protocols:performance.getEntriesByType('resource')
+                        .filter(e=>e.name.endsWith('/echo')).map(e=>e.nextHopProtocol)};
+                })().catch(e=>manyH3={error:String(e)});void 0""")
+                result=None
+                for _ in range(200):
+                    ctx.advance(10);result=ctx.eval("manyH3")
+                    if result is not None:break
+                self.assertEqual(result['values'],['native-http3:stream-'+str(i) for i in range(6)])
+                self.assertTrue(all(p=='h3' for p in result['protocols']))
+                self.assertEqual(self.fixture.connections-before,1)
+        finally:
+            if previous is None:os.environ.pop("RUYIJS_TLS_CA_FILE",None)
+            else:os.environ["RUYIJS_TLS_CA_FILE"]=previous
+
     def test_cancel_one_stream_keeps_other_stream_alive(self):
         connection = self.direct()
         try:

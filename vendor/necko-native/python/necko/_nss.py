@@ -6,7 +6,6 @@ import ctypes as ct
 import datetime
 import hashlib
 import ipaddress
-import json
 import os
 import ssl
 import struct
@@ -171,18 +170,19 @@ class Context:
             )
             if not path.exists():
                 raise OSError(f"Invalid TLS CA certificate bundle path: {path}")
-            roots = []
-            for candidate in sorted(path.iterdir()) if path.is_dir() else [path]:
-                if candidate.is_file():
-                    content = candidate.read_bytes()
-                    if b"-----BEGIN CERTIFICATE-----" in content:
-                        roots.extend(x509.load_pem_x509_certificates(content))
-            self.store = Store(roots)
-            trust = b"".join(_certificate_bytes(root) for root in roots)
-            if not isinstance(verify, (str, os.PathLike)):
-                self.constraints = json.loads(
-                    roots_path.with_name("firefox-root-constraints.json").read_text()
-                )
+            if isinstance(verify, (str, os.PathLike)):
+                # Explicit trust bundles are read on every connection as before.
+                roots = []
+                for candidate in sorted(path.iterdir()) if path.is_dir() else [path]:
+                    if candidate.is_file():
+                        content = candidate.read_bytes()
+                        if b"-----BEGIN CERTIFICATE-----" in content:
+                            roots.extend(x509.load_pem_x509_certificates(content))
+                self.store = Store(roots)
+                trust = b"".join(_certificate_bytes(root) for root in roots)
+            else:
+                from ._trust import default_store
+                self.store, trust, self.constraints = default_store(path)
         if cert:
             certificate, key = cert if isinstance(cert, (tuple, list)) else (cert, cert)
             certificates = x509.load_pem_x509_certificates(

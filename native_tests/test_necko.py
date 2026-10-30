@@ -9,6 +9,11 @@ PYTHON = ROOT / "vendor/necko-linux/bin/python3"
 
 @unittest.skipUnless((ROOT / "vendor/necko-linux/backend.json").is_file(), "build native Necko/NSS first")
 class NeckoTests(unittest.TestCase):
+    def test_concurrent_native_helper(self):
+        result = subprocess.run([str(PYTHON), "-I", "-B", str(ROOT / "native_tests/multiplex_probe.py")],
+            capture_output=True, text=True, timeout=70)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_local_nss_transport(self):
         result = subprocess.run([str(PYTHON), "-I", "-B", str(ROOT / "native_tests/necko_probe.py")],
             capture_output=True, text=True, timeout=70)

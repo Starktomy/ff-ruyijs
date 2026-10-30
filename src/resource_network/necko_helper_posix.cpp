@@ -29,6 +29,7 @@ bool NeckoHelper::Start(const std::wstring& python, NeckoPipe& input, NeckoPipe&
   if (mode) {
     const std::wstring modes(mode);
     if (modes == L"--webtransport") args.push_back("--webtransport");
+    else if (modes == L"--multiplex --timing-v3") { args.push_back("--multiplex"); args.push_back("--timing-v3"); }
     else if (modes == L"--session --timing-v3") { args.push_back("--session"); args.push_back("--timing-v3"); }
     else if (!modes.empty()) return false;
   }

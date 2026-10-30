@@ -58,15 +58,17 @@ def read_text(head=None):
     return read_exact(size).decode("utf-8")
 
 
-def write_text(value):
+def write_text(value, output=None):
     data = value.encode("utf-8")
-    sys.stdout.buffer.write(struct.pack("<I", len(data)) + data)
+    output = sys.stdout.buffer if output is None else output
+    output.write(struct.pack("<I", len(data)) + data)
 
 
-def write_error(message):
-    sys.stdout.buffer.write(struct.pack("<I", 0))
-    write_text(message[:1024])
-    sys.stdout.buffer.flush()
+def write_error(message, output=None):
+    output = sys.stdout.buffer if output is None else output
+    output.write(struct.pack("<I", 0))
+    write_text(message[:1024], output)
+    output.flush()
 
 
 def read_request(head=None):
@@ -81,7 +83,8 @@ def read_request(head=None):
     return method, url, headers, read_exact(length)
 
 
-def serve(adapter, method, url, headers, body):
+def serve(adapter, method, url, headers, body, *, output=None, control=None):
+    output = sys.stdout.buffer if output is None else output
     if sum(len(k.encode("utf-8")) + len(v.encode("utf-8")) for k, v in headers) > 65536:
         raise ValueError("Request headers exceed 64 KiB")
     fields = CaseInsensitiveDict()
@@ -92,7 +95,7 @@ def serve(adapter, method, url, headers, body):
     # "Content-Length: 0" for a bodiless non-GET (a CORS preflight) is not sent.
     if "Content-Length" not in fields and not body:
         prepared.headers.pop("Content-Length", None)
-    control = RequestControl(BUDGET, max_attempts=ATTEMPTS)
+    control = control or RequestControl(BUDGET, max_attempts=ATTEMPTS)
     verify = os.environ.get("RUYIJS_TLS_CA_FILE") or True
     reader = open_response(adapter, prepared, control,
                            timeout=(BUDGET, READ), verify=verify, proxies=transport_proxies(),
@@ -110,27 +113,27 @@ def serve(adapter, method, url, headers, body):
     if len(reader.headers) > 256 or sum(
             len(k.encode("utf-8")) + len(v.encode("utf-8")) for k, v in reader.headers) > 65536:
         raise ValueError("Response headers exceed the transport limit")
-    sys.stdout.buffer.write(struct.pack("<I", reader.status))
-    sys.stdout.buffer.write(struct.pack("<I", len(reader.headers)))
+    output.write(struct.pack("<I", reader.status))
+    output.write(struct.pack("<I", len(reader.headers)))
     for name, value in reader.headers:
-        write_text(name)
-        write_text(value)
-    sys.stdout.buffer.write(struct.pack("<I", len(payload)))
-    sys.stdout.buffer.write(payload)
+        write_text(name, output)
+        write_text(value, output)
+    output.write(struct.pack("<I", len(payload)))
+    output.write(payload)
     # A versioned observation trailer accompanies the existing response.
     # Counts come from the one strict decoder, including compressed bodies.
     measured = '--timing-v2' in sys.argv or '--timing-v3' in sys.argv
     establish = '--timing-v3' in sys.argv
     version = 0x33545252 if establish else 0x32545252 if measured else 0x31545252
-    sys.stdout.buffer.write(struct.pack('<IQQ', version,
+    output.write(struct.pack('<IQQ', version,
                                        reader.decoder.encoded, reader.decoder.decoded))
-    write_text({10: 'http/1.0', 11: 'http/1.1', 20: 'h2', 30: 'h3'}.get(reader.version, ''))
+    write_text({10: 'http/1.0', 11: 'http/1.1', 20: 'h2', 30: 'h3'}.get(reader.version, ''), output)
     if establish:
         from ruyijs_necko.timing import FIELDS
-        sys.stdout.buffer.write(struct.pack('<dddddddd', *snapshot(control, FIELDS)))
+        output.write(struct.pack('<dddddddd', *snapshot(control, FIELDS)))
     elif measured:
-        sys.stdout.buffer.write(struct.pack('<ddd', *snapshot(control)))
-    sys.stdout.buffer.flush()
+        output.write(struct.pack('<ddd', *snapshot(control)))
+    output.flush()
 
 
 def main():
@@ -166,6 +169,9 @@ if __name__ == "__main__":
         if "--webtransport" in sys.argv[1:]:
             from ruyijs_necko.webtransport_worker import main as webtransport
             webtransport()
+        elif "--multiplex" in sys.argv[1:]:
+            from ruyijs_necko.multiplex import main as multiplex
+            multiplex()
         else:
             session() if "--session" in sys.argv[1:] else main()
     except Exception as error:

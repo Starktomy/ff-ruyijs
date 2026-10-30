@@ -239,9 +239,13 @@ bool Run(JSContext* cx, js::cli::OptionParser* options, Checkpoint checkpoint) {
   BindHttpEnvironment(*main,*resources,*scheduling);
   BindObjectUrlNetwork(*main, *resources);
   BindBlobStreams(*main->platform, *resources);
-  // Two helper sessions start in the background now, so the page's first
+  // Transport helpers start in the background now, so the page's first
   // requests do not wait for the helper interpreter (NECKO_TRANSPORT.md).
+#ifdef _WIN32
   resource_network::PrewarmNeckoSessions(2);
+#else
+  resource_network::PrewarmNeckoSessions(1);
+#endif
   asyncHttp = std::make_unique<resource_network::AsyncHttp>(resources->Resources());
   if (!resources->BindAsyncHttp(*asyncHttp)) return false;
   BindImageLoads(*main, *asyncHttp);

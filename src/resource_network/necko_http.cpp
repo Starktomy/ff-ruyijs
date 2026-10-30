@@ -1,3 +1,4 @@
+#ifdef _WIN32
 #include "resource_network/necko_http.h"
 #include "resource_network/necko_helper.h"
 #include "resource_network/necko_wire.h"
@@ -190,3 +191,5 @@ void PrewarmNeckoSessions(size_t count) noexcept {
   }
 }
 }
+
+#endif
