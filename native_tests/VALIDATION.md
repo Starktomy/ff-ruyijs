@@ -1,8 +1,9 @@
 # Native Linux validation — 2026-10-30
 
-Latest performance follow-up: **34 native tests and 4 installed-package tests
-pass**. The original `8041fe9` port validation is retained first as the benchmark
-baseline; the follow-up is recorded below and in `PERFORMANCE.md`.
+Latest iframe follow-up: **41 native tests, 5 installed-package tests and all
+6 official Turnstile test scenarios pass**. Earlier port and performance
+validation is retained below as the benchmark baseline. See also
+`PERFORMANCE.md` and `IFRAME_COMPATIBILITY.md`.
 
 Source base: upstream `a626670`, still current at the final fetch.
 Runtime: native x86_64 ELF, SpiderMonkey 159, Firefox donor Skia 149,
@@ -153,3 +154,31 @@ aggregate summary. These are individual live integration observations, not a
 performance benchmark. Public dummy-key documents differ from production
 challenges, so this does not establish real-site challenge compatibility or
 resolve the historical Wine widget-initialization report.
+
+## Native iframe lifecycle follow-up
+
+`srcdoc` now uses the existing asynchronous frame-navigation queue and shares
+its cancellation/completion token with `src`. Fallback `src` changes stay
+inactive while `srcdoc` is present. Removing the only source queues an empty
+about:blank document without a network request. Local reproductions cover the
+observable failures before each fix; details and standards references are in
+`IFRAME_COMPATIBILITY.md`.
+
+The rebuilt native runtime passes **41 tests in 26.847 s**, including seven
+new iframe regressions. Smoke, changed-source pyflakes and whitespace checks
+pass. The unchanged incremental build reports `ninja: no work to do`.
+
+A fresh `/tmp/ruyijs-iframe-native` wheel installation passes **5 independent
+installed tests in 3.197 s**: the previous batch/pool, C-host NSS, H3 and
+WebTransport scenarios, plus deferred srcdoc/replacement/closed-shadow/source
+precedence/blank-reset behavior. Child clients run outside the checkout with
+source/runtime overrides removed. All **six official public Turnstile test
+scenarios** also match their expected results from this installation, taking
+3.307-3.810 s, with zero recorded script or console errors. No production
+challenge acceptance is established by these dummy-key runs.
+
+Wheel size: 72,156,360 bytes; SHA256
+`2f0d7f26029c424ab8aa2a4997182cb4e81f168d0fde1af42789a8cd280818da`.
+Logs and sanitized aggregates remain in ignored `artifacts/iframe-*` files.
+Windows compilation and the original Wine script failure were not reproduced
+in this follow-up; the shared runtime change was compiled and tested on Linux.

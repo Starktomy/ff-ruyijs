@@ -82,3 +82,10 @@ compares all TextMetrics fields, Canvas RGBA, PNG hashes and DOM rectangles.
 - Do not recommend Node.js for running site JS — ff-ruyijs runs it natively in SpiderMonkey.
 
 Linux performance changes and benchmark semantics are documented in `PERFORMANCE.md`.
+
+Native iframe lifecycle regressions and the limits of the older Wine integration
+notes are documented in `native_tests/IFRAME_COMPATIBILITY.md`. `srcdoc` must use
+the same asynchronous navigation queue and cancellation token as `src`; parent
+load waits for it. A present `srcdoc` makes fallback `src` changes inactive,
+and removing the only source navigates to about:blank. `window.top` is readonly
+and LegacyUnforgeable, not replaceable. Test these with `native_tests/test_iframes.py`.
