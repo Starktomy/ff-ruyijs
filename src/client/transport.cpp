@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#ifdef _WIN32
 bool ruyijs_context::Operation(bool writing, void* data, DWORD length,
                                DWORD* count, ULONGLONG deadline, bool connecting) {
   OVERLAPPED operation{};
@@ -31,6 +32,7 @@ bool ruyijs_context::Operation(bool writing, void* data, DWORD length,
   CloseHandle(operation.hEvent);
   return ok != FALSE;
 }
+#endif
 
 bool ruyijs_context::Transfer(bool writing, void* data, uint32_t length,
                               ULONGLONG deadline) {

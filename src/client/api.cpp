@@ -89,7 +89,7 @@ extern "C" void ruyijs_close(ruyijs_context* context) {
       constexpr char close[] = "{\"id\":0,\"op\":\"close\"}";
       std::string response;
       if (context->Exchange(close, sizeof(close) - 1, &response))
-        WaitForSingleObject(context->process, context->timeout);
+        context->WaitForExit();
       context->Stop();
     }
   } catch (...) {

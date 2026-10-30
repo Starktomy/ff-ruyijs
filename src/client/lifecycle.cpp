@@ -3,6 +3,7 @@
 #include <bcrypt.h>
 
 ruyijs_context::~ruyijs_context() { Stop(); }
+void ruyijs_context::WaitForExit() { WaitForSingleObject(process, timeout); }
 
 void ruyijs_context::Stop() {
   active = false;

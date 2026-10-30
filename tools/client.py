@@ -9,7 +9,7 @@ from provenance import digest
 
 
 def build_client(native, destination):
-    sources = sorted((native.root / "src/client").glob("*.cpp"))
+    sources = sorted(p for p in (native.root / "src/client").glob("*.cpp") if not p.stem.endswith("_posix"))
     if not sources:
         raise ValueError("src/client must contain implementation files")
     objects = []

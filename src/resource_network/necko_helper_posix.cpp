@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <locale>
 #include <vector>
+#include <filesystem>
 
 namespace ruyijs::resource_network {
 NeckoHelper::~NeckoHelper() { Cancel(); }
@@ -62,10 +63,18 @@ bool NeckoHelper::Finish(ULONGLONG deadline) {
   return false;
 }
 bool NeckoPythonPath(std::wstring* output) {
-  // The client selects the isolated NSS helper built by build_necko_linux.py.
+  const char* backend = std::getenv("RUYIJS_HTTP_BACKEND");
+  if (backend && std::string(backend) == "curl") return false;
   const char* configured = std::getenv("RUYIJS_NATIVE_NECKO_PYTHON");
-  if (!configured || access(configured, X_OK)) return false;
-  *output = std::wstring_convert<std::codecvt_utf8<wchar_t>>().from_bytes(configured);
+  std::filesystem::path path;
+  if (configured) path = configured;
+  else {
+    path = std::filesystem::path(platform::ExecutablePath()).parent_path().parent_path() /
+           "vendor/necko-linux/bin/python3";
+    if (!std::filesystem::is_regular_file(path.parent_path().parent_path() / "backend.json")) return false;
+  }
+  if (access(path.c_str(), X_OK)) return false;
+  *output = path.wstring();
   return true;
 }
 }

@@ -38,3 +38,7 @@ target_link_libraries(js PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/urlpattern/target/
 target_link_options(js PRIVATE ${DONOR_LINK_FLAGS})
 set_target_properties(js PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/dist"
   BUILD_RPATH "$ORIGIN")
+add_library(ruyijs_client SHARED src/client/api.cpp src/client/transport.cpp src/client/lifecycle_posix.cpp)
+target_compile_features(ruyijs_client PRIVATE cxx_std_20)
+target_link_libraries(ruyijs_client PRIVATE pthread)
+set_target_properties(ruyijs_client PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/dist")
