@@ -18,7 +18,11 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <chrono>
+#endif
 #include "domain/resource_network/cookie_scope.h"
 #include "web_speech/realm.h"
 #include "jsapi.h"
@@ -194,10 +198,15 @@ bool PageLoad::LoadFrame(BrowsingContext& target, const std::string& url,
   const auto started = scheduling_.Inspect();
   const double origin = started.epoch + started.now;
   // The Necko boundary ticks (QPC milliseconds) map onto this clock from here.
+#ifdef _WIN32
   LARGE_INTEGER counter{}, frequency{};
   QueryPerformanceCounter(&counter);
   QueryPerformanceFrequency(&frequency);
   const double qpc = double(counter.QuadPart) * 1000 / double(frequency.QuadPart);
+#else
+  const double qpc = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+#endif
   resource_network::PerformHttp(owners.resources, method, url, headers, requestBody,
       &http, resource_network::RedirectMode::Follow, options);
   // Commit the response URL, not the pre-redirect request URL. This is also

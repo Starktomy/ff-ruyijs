@@ -16,13 +16,16 @@ class Donor:
         self.shell = self.obj / "js/src/shell"
         self.backend_path = self.shell / "backend.mk"
         self.backend = self.backend_path.read_text(encoding="utf-8")
-        required = {"JS_STANDALONE": "1", "OS_ARCH": "WINNT"}
+        required = {"JS_STANDALONE": "1"}
         for name, expected in required.items():
             if str(self.substs.get(name)) != expected:
                 raise ValueError(f"donor requires {name}={expected}")
+        self.windows = self.substs.get("OS_ARCH") == "WINNT"
+        if self.substs.get("OS_ARCH") not in ("WINNT", "Linux"):
+            raise ValueError("donor must target Windows or Linux")
         if "x86_64" not in str(self.substs.get("target", "")):
-            raise ValueError("donor must target x86_64 Windows")
-        if "-MD" not in self.flags("COMPUTED_CXXFLAGS"):
+            raise ValueError("donor must target x86_64")
+        if self.windows and "-MD" not in self.flags("COMPUTED_CXXFLAGS"):
             raise ValueError("donor must use the shared MSVC CRT (-MD)")
 
     def values(self, variable):
@@ -50,11 +53,13 @@ class Donor:
                 for item in self.flags(key)]
 
     def objects(self):
-        text = (self.shell / "js_exe.list").read_text(encoding="utf-8")
+        text = (self.shell / ("js_exe.list" if self.windows else "js.list")).read_text(encoding="utf-8")
         return [(self.shell / line.strip().strip('"')).resolve()
                 for line in text.splitlines() if line.strip()]
 
     def libpaths(self, vs_root=None):
+        if not self.windows:
+            return []
         result = []
         for value in self.substs["HOST_LINKER_LIBPATHS"]:
             path = value.split(":", 1)[1].strip("'\"")
@@ -76,6 +81,6 @@ class Donor:
         return (Path(vs_root) / normalized.split(marker, 1)[1]).as_posix()
 
     def source_inputs(self):
-        return [self.config_path, self.backend_path, self.shell / "js_exe.list",
+        return [self.config_path, self.backend_path, self.shell / ("js_exe.list" if self.windows else "js.list"),
                 self.shell / "Unified_cpp_js_src_shell0.cpp",
                 self.obj / "js/src/js-confdefs.h", self.src / "js/src/shell/js.cpp"]

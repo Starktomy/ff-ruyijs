@@ -31,7 +31,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifdef _WIN32
 #include <windows.h>
+#endif
+#include <chrono>
 
 namespace ruyijs {
 namespace {
@@ -55,10 +58,14 @@ double Epoch(execution_scheduling::Realm& scheduling) {
 // Windows QPC milliseconds, the clock the Necko boundary ticks
 // (HttpResult::requestTick/responseTick/headersTick) are on.
 double QpcMilliseconds() {
+#ifdef _WIN32
   LARGE_INTEGER counter{}, frequency{};
   QueryPerformanceCounter(&counter);
   QueryPerformanceFrequency(&frequency);
   return double(counter.QuadPart) * 1000 / double(frequency.QuadPart);
+#else
+  return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+#endif
 }
 // Firefox 159 (measured headed and headless, cold and warm): a browser-
 // initiated load opens its DocumentChannel in the parent process before the

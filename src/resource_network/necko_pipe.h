@@ -1,5 +1,8 @@
 #ifndef RUYIJS_NECKO_PIPE_H
 #define RUYIJS_NECKO_PIPE_H
+#ifndef _WIN32
+#include "resource_network/necko_pipe_posix.h"
+#else
 #include <windows.h>
 #include <cstdint>
 
@@ -33,4 +36,5 @@ class NeckoPipe {
   NeckoHandle parent_, child_, event_;
 };
 }
+#endif
 #endif

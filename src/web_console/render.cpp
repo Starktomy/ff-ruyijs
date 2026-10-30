@@ -1,5 +1,7 @@
 #include "web_console/render.h"
 #include "web_console/internal.h"
+#include "runtime/exception_capture.h"
+#include "vm/ErrorObject.h"
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "js/Object.h"
@@ -62,6 +64,12 @@ std::string Quoted(const std::string& label) {
 std::string Render(JSContext* cx, JS::HandleValue value) {
   if (value.isObject()) {
     JSObject* object = js::UncheckedUnwrap(&value.toObject());
+    if (object->is<js::ErrorObject>()) {
+      JS::RootedObject wrapped(cx, &value.toObject());
+      JS::RootedObject stack(cx, JS::ExceptionStackOrNull(wrapped));
+      const auto report = ruyijs::DescribeException(cx, value, stack);
+      return report.name + ": " + report.message + (report.stack.empty() ? "" : "\n" + report.stack);
+    }
     const char* name = JS::GetClass(object)->name;
     return std::string("[object ") + (name ? name : "Object") + "]";
   }

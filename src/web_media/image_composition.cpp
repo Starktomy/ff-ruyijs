@@ -1,5 +1,6 @@
 // Shared WebMedia canvas composition; the codec supplies actual frame pixels.
 #include "image_animation.h"
+#include "web_media/image_wic.h"
 #include <algorithm>
 #include <cstring>
 namespace ruyijs::web_media {

@@ -17,6 +17,8 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import os
+import shutil
 
 
 def digest(path):
@@ -41,19 +43,26 @@ def strong_globals(nm, path):
 def privatize(native, library, directory, jsrust):
     """Rename std globals that donor jsrust also defines; return the renames."""
     tools = Path(native.librarian()[0]).parent
-    nm, ar, objcopy = (str(tools / name) for name in ('llvm-nm.exe', 'llvm-ar.exe', 'llvm-objcopy.exe'))
+    if os.name == "nt":
+        nm, ar, objcopy = (str(tools / name) for name in ('llvm-nm.exe', 'llvm-ar.exe', 'llvm-objcopy.exe'))
+    else:
+        nm, ar, objcopy = (shutil.which(name) for name in ('nm', 'ar', 'objcopy'))
     members = subprocess.run([ar, 't', str(library)], capture_output=True, text=True, check=True).stdout.split()
     std = [m for m in members if m.startswith('std-') and m.endswith('.o')]
-    if len(std) != 1:
-        raise ValueError('rust runtime must hold exactly one std object')
-    subprocess.run([ar, 'x', str(library), std[0]], cwd=directory, check=True)
-    obj = directory / std[0]
-    shared = sorted(strong_globals(nm, obj) & strong_globals(nm, jsrust))
-    renames = {name: 'ruyijs_private_' + hashlib.sha256(name.encode()).hexdigest()[:16] for name in shared}
-    if renames:
-        subprocess.run([objcopy, *[f'--redefine-sym={a}={b}' for a, b in renames.items()], str(obj)], check=True)
-        subprocess.run([ar, 'r', str(library), std[0]], cwd=directory, check=True)
-    obj.unlink()
+    if not std or (os.name == 'nt' and len(std) != 1):
+        raise ValueError('rust runtime has an unexpected std object layout')
+    existing = strong_globals(nm, jsrust)
+    renames = {}
+    for member in std:
+        subprocess.run([ar, 'x', str(library), member], cwd=directory, check=True)
+        obj = directory / member
+        shared = sorted(strong_globals(nm, obj) & existing)
+        names = {name: 'ruyijs_private_' + hashlib.sha256(name.encode()).hexdigest()[:16] for name in shared}
+        if names:
+            subprocess.run([objcopy, *[f'--redefine-sym={a}={b}' for a, b in names.items()], str(obj)], check=True)
+            subprocess.run([ar, 'r', str(library), member], cwd=directory, check=True)
+            renames.update(names)
+        obj.unlink()
     return renames
 
 
@@ -67,18 +76,18 @@ def build(native):
         rustc = rustc[0]
     if not Path(rustc).is_file():
         raise RuntimeError('The configured donor rustc is required: ' + rustc)
-    jsrust = [p for p in native.donor.libraries() if p.name == 'jsrust.lib']
+    jsrust = [p for p in native.donor.libraries() if p.name == ('jsrust.lib' if os.name == 'nt' else 'libjsrust.a')]
     if len(jsrust) != 1:
         raise ValueError('donor must link exactly one jsrust.lib')
     version = subprocess.run([rustc, '--version'], capture_output=True, text=True, check=True).stdout
     # Same codegen as the rlibs that depend on it (compression_native/urlpattern).
-    command = [rustc, '--edition=2021', '--target=x86_64-pc-windows-msvc', '--crate-type=staticlib',
+    command = [rustc, '--edition=2021', '--target=' + ('x86_64-pc-windows-msvc' if os.name == 'nt' else 'x86_64-unknown-linux-gnu'), '--crate-type=staticlib',
                '--crate-name=ruyijs_rust_runtime', '-C', 'opt-level=2', '-C', 'panic=abort',
                '-C', 'target-feature=-crt-static', '-C', 'codegen-units=1']
     identity = {'builder': digest(__file__), 'rustc': version, 'rustcSHA256': digest(rustc),
                 'jsrustSHA256': digest(jsrust[0]), 'command': command[1:]}
     signature = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    library = directory / 'ruyijs_rust_runtime.lib'
+    library = directory / ('ruyijs_rust_runtime.lib' if os.name == 'nt' else 'libruyijs_rust_runtime.a')
     stamp = directory / 'build.json'
     if stamp.is_file():
         old = json.loads(stamp.read_text('utf8'))

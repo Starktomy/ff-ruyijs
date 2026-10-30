@@ -19,6 +19,11 @@
 !/tools/generated/
 !/tools/binding_order.py
 !/tools/build.py
+!/tools/prepare_linux.py
+!/tools/build_linux.py
+!/tools/build_necko_linux.py
+!/tools/build_neqo_linux.py
+!/tools/rendering_probe.py
 !/tools/client.py
 !/tools/compression_native.py
 !/tools/donor.py
@@ -43,6 +48,7 @@ __pycache__/
 !/vendor/image-native/
 !/vendor/urlpattern-native/
 /vendor/necko-native/**/*.dll
+/vendor/necko-native/**/*.so
 *.py[cod]
 .pytest_cache/
 .mypy_cache/

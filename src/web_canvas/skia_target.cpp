@@ -7,11 +7,15 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifdef _WIN32
 #include <windows.h>
 #include <dwrite.h>
+#endif
 // Firefox's Skia archive carries the GDI typeface (Uniscribe) beside DirectWrite.
+#ifdef _WIN32
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "usp10.lib")
+#endif
 
 #include "web_canvas/skia_target.h"
 #include "web_geometry/glyph_mask.h"
@@ -40,13 +44,17 @@
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
+#ifdef _WIN32
 #include "include/ports/SkTypeface_win.h"
+#endif
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkGradient.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/private/base/SkTFitsIn.h"
+#ifndef RUYIJS_SYSTEM_SKIA
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskBlurFilter.h"
+#endif
 
 namespace ruyijs::web_canvas::skia {
 namespace {
@@ -816,10 +824,18 @@ int32_t BlurRadius(float sigma) {
   return static_cast<int32_t>(std::floor(sigma * kGaussianScaleFactor + 0.5f));
 }
 
+#ifndef RUYIJS_SYSTEM_SKIA
 void FreeBlurredMask(const void*, void* image) { SkMaskBuilder::FreeImage(image); }
+#endif
 
 // GaussianBlur::BlurAlphaMask.
 sk_sp<SkImage> BlurAlphaMask(SkImage* alphaImage, float sigma, SkPoint& offset) {
+#ifdef RUYIJS_SYSTEM_SKIA
+  // Distribution Skia exposes image filters, but not the private mask ABI.
+  // Callers already use the public Gaussian filter when no private mask exists.
+  (void)alphaImage; (void)sigma; (void)offset;
+  return nullptr;
+#else
   SkPixmap pixmap;
   if (sigma > 135.0f || alphaImage->colorType() != kAlpha_8_SkColorType ||
       !alphaImage->peekPixels(&pixmap) || !SkTFitsIn<uint32_t>(pixmap.rowBytes())) {
@@ -842,6 +858,7 @@ sk_sp<SkImage> BlurAlphaMask(SkImage* alphaImage, float sigma, SkPoint& offset) 
   }
   if (dst.image()) SkMaskBuilder::FreeImage(dst.image());
   return nullptr;
+#endif
 }
 
 // DrawTarget::DrawShadow for a path filled (stroke null) or stroked with the
@@ -1216,6 +1233,7 @@ bool DrawImage(const Surface& surface, const double transform[6], const Image& i
 
 // ---- Text: ScaledFontDWrite + DrawTargetSkia::DrawGlyphs ----
 namespace {
+#ifdef _WIN32
 IDWriteFactory* DWriteFactory() {
   static IDWriteFactory* factory = [] {
     IDWriteFactory* created = nullptr;
@@ -1267,6 +1285,11 @@ sk_sp<SkTypeface> TypefaceFor(IDWriteFontFace* face) {
   if (font) font->Release();
   return typeface;
 }
+#else
+struct TextSettings { int mode = 0; };
+const TextSettings& Settings() { static const TextSettings settings; return settings; }
+sk_sp<SkTypeface> TypefaceFor(IDWriteFontFace* face) { return sk_ref_sp(face); }
+#endif
 }  // namespace
 
 namespace {

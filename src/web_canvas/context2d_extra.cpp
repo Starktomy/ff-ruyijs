@@ -45,15 +45,12 @@ bool detail::ReadImagePixels(State& state, JS::HandleValue value, detail::Source
     out->width = frame.width; out->height = frame.height; out->bytes = frame.pixels;
     if (!out->width || !out->height || out->bytes.size() < size_t(out->width) * out->height * 4)
       return false;
-    // The decoder output is straight alpha; Firefox's surface is premultiplied
-    // with gfx's (c * a + 254) / 255, and X8 when every pixel is opaque.
-    out->opaque = true;
+    // Media frames are premultiplied BGRA; the Canvas store is premultiplied
+    // RGBA. Convert channel order once without multiplying alpha again.
+    out->opaque = frame.opaque;
     for (size_t i = 0; i < size_t(out->width) * out->height; ++i) {
       uint8_t* px = out->bytes.data() + i * 4;
-      const unsigned a = px[3];
-      if (a == 255) continue;
-      out->opaque = false;
-      for (int c = 0; c < 3; ++c) px[c] = uint8_t((unsigned(px[c]) * a + 254) / 255);
+      std::swap(px[0], px[2]);
     }
     return true;
   }

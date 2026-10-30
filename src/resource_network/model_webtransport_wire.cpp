@@ -1,4 +1,5 @@
 #include "resource_network/model_webtransport_wire.h"
+#include "runtime/platform.h"
 
 namespace ruyijs::resource_network::webtransport_wire {
 Writer Begin(const WebTransportOptions& options) {
@@ -36,7 +37,7 @@ WebTransportEvent Event(Reader& input) {
 }
 bool Exchange(NeckoPipe& input,NeckoPipe& output,const Writer& request,std::vector<WebTransportEvent>* events) {
   if(request.bytes.size()>kFrameLimit)return false;
-  uint32_t size=uint32_t(request.bytes.size());const auto deadline=GetTickCount64()+15000;
+  uint32_t size=uint32_t(request.bytes.size());const auto deadline=platform::MonotonicMilliseconds()+15000;
   if(!input.Write(&size,4,deadline)||!input.Write(request.bytes.data(),size,deadline)||
       !output.Read(&size,4,deadline)||size>kFrameLimit)return false;
   std::string bytes(size,'\0');if(!output.Read(bytes.data(),size,deadline))return false;

@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-struct IDWriteFontFace;
+#include "runtime/font_face.h"
 
 namespace ruyijs::web_canvas::skia {
 // A colour as gfx::DeviceColor: straight (non-premultiplied) floats.

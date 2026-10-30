@@ -1,4 +1,7 @@
 #pragma once
+#ifndef _WIN32
+#include "resource_network/necko_helper_posix.h"
+#else
 #include "resource_network/necko_pipe.h"
 #include <mutex>
 #include <string>
@@ -68,3 +71,4 @@ class NeckoHelper {
 };
 bool NeckoPythonPath(std::wstring*);
 }
+#endif

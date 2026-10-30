@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import signal
 from pathlib import Path
 import subprocess
 import tempfile
@@ -106,22 +107,40 @@ class Context(EnvironmentControl, SchedulingControl, RandomControl, ResourceCont
         if proxy and any(c in proxy for c in "\x00\r\n"):
             raise ValueError("proxy URL contains invalid characters")
         tls_version = _tls_version(tls)
+        selected = shell or os.environ.get("RUYIJS_SHELL")
+        self.shell = (Path(selected).resolve() if selected else
+                      get_runtime_path() / "dist" / ("js.exe" if os.name == "nt" else "js"))
         # Capture transport settings for this child without changing os.environ.
         child_environment = dict(os.environ)
+        self.transport = "standalone-necko+nss"
+        if os.name != "nt":
+            backend = child_environment.get("RUYIJS_HTTP_BACKEND", "auto")
+            if backend not in ("auto", "necko", "curl"):
+                raise ValueError("RUYIJS_HTTP_BACKEND must be auto, necko or curl")
+            configured = child_environment.get("RUYIJS_NATIVE_NECKO_PYTHON")
+            helper = Path(configured) if configured else self.shell.parent.parent / "vendor/necko-linux/bin/python3"
+            ready = helper.is_file() and (bool(configured) or (helper.parent.parent / "backend.json").is_file())
+            if backend != "curl" and ready:
+                child_environment["RUYIJS_NATIVE_NECKO_PYTHON"] = str(helper.absolute())
+            else:
+                if backend == "necko" or configured and backend != "curl":
+                    raise FileNotFoundError(f"Native Necko helper does not exist: {helper}")
+                child_environment.pop("RUYIJS_NATIVE_NECKO_PYTHON", None)
+                self.transport = "libcurl"
+                if tls_version is not None:
+                    raise NotImplementedError("Firefox TLS profiles require the native Necko/NSS helper; run tools/build_necko_linux.py")
         child_environment["RUYIJS_HTTP_PROXY"] = proxy or ""
         if tls_version is not None:
             # The Necko child inherits this and builds its TLS profile from it.
             child_environment["NECKO_FIREFOX"] = tls_version
-        self.tls = tls_version or child_environment.get("NECKO_FIREFOX") or "159"
+        self.tls = (tls_version or child_environment.get("NECKO_FIREFOX") or "159") if self.transport == "standalone-necko+nss" else "system"
         self.mode = mode
         self._lock, self._next_id = threading.Lock(), 0
         self._callbacks = Callbacks()
         self._host_releases = deque()
         self._host_callback_sequence = 0
         self._closed, self._pipe, self._process, self._stderr = True, None, None, None
-        selected = shell or os.environ.get("RUYIJS_SHELL")
-        self.shell = (Path(selected).resolve() if selected else
-                      get_runtime_path() / "dist" / "js.exe")
+        self._process_group = None
         if not self.shell.is_file():
             raise FileNotFoundError(f"ruyijs shell does not exist: {self.shell}")
         _prefer_bundled_crt(self.shell)
@@ -132,16 +151,19 @@ class Context(EnvironmentControl, SchedulingControl, RandomControl, ResourceCont
                 [str(self.shell), "--ruyijs-rpc", self._pipe.name,
                  "--ruyijs-mode", mode],
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=self._stderr,
-                creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                start_new_session=os.name == "posix", close_fds=True,
                 env=child_environment,
             )
+            if os.name == "posix":
+                self._process_group = self._process.pid
             self._pipe.connect(time.monotonic() + self.timeout)
             self._closed = False
             if environment is not None:
                 self.configure_environment(environment)
         except BaseException as error:
             if isinstance(error, EOFError) or (
-                    isinstance(error, OSError) and error.winerror == 109):
+                    isinstance(error, OSError) and getattr(error, "winerror", None) == 109):
                 if self._process is not None and self._process.poll() is None:
                     try:
                         self._process.wait(timeout=1)
@@ -173,6 +195,13 @@ class Context(EnvironmentControl, SchedulingControl, RandomControl, ResourceCont
             self._host_releases.clear()
         if hasattr(self, "_callbacks"):
             self._callbacks.functions.clear()
+        group = getattr(self, "_process_group", None)
+        if group is not None:
+            self._process_group = None
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         if self._process is not None and self._process.poll() is None:
             self._process.kill()
             self._process.wait(timeout=5)

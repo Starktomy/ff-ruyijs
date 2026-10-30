@@ -13,7 +13,12 @@
 #include "js/PropertyAndElement.h"
 #include "js/String.h"
 #include "js/Realm.h"
+#include "runtime/platform.h"
+#ifdef _WIN32
 #include <windows.h>
+#endif
+#include <codecvt>
+#include <locale>
 
 namespace ruyijs::web_workers {
 namespace {
@@ -25,11 +30,16 @@ const JSClassOps kWorkerOps = {nullptr, nullptr, nullptr, nullptr, nullptr, null
                                FinalizeWorker};
 }  // namespace
 std::wstring WorkerExecutable() {
+#ifdef _WIN32
   std::wstring path(32768, L'\0');
   const DWORD size = GetModuleFileNameW(nullptr, path.data(), DWORD(path.size()));
   if (!size || size >= path.size()) return {};
   path.resize(size);
   return path;
+#else
+  std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
+  return convert.from_bytes(platform::ExecutablePath());
+#endif
 }
 namespace {
 bool UrlText(JSContext* cx, JS::HandleValue value, std::string* text) {

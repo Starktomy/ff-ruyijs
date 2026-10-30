@@ -3,21 +3,16 @@
 // seeds (RelativeTimeline::GetRandomTimelineSeed), both from the platform
 // random generator as Firefox draws them.
 #include "execution_scheduling/timer_precision.h"
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <bcrypt.h>
+#include "runtime/platform.h"
 #include <cstdlib>
 #include <mutex>
+#ifdef _WIN32
 #pragma comment(lib, "bcrypt.lib")
+#endif
 
 namespace ruyijs::execution_scheduling {
 namespace {
-bool Random(void* out, ULONG size) {
-  return BCRYPT_SUCCESS(BCryptGenRandom(nullptr, static_cast<PUCHAR>(out), size,
-                                        BCRYPT_USE_SYSTEM_PREFERRED_RNG));
-}
+bool Random(void* out, size_t size) { return platform::RandomBytes(out, size); }
 }  // namespace
 const domain::execution_scheduling::TimerSecret& ProcessTimerSecret() {
   static domain::execution_scheduling::TimerSecret secret;

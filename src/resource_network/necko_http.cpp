@@ -7,8 +7,15 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#ifndef _WIN32
+#include "runtime/platform.h"
+#endif
 
 namespace ruyijs::resource_network {
+#ifndef _WIN32
+bool CurlHttp(const std::string&, const std::string&, const HeaderPairs&, const std::string&, HttpResult*, uint32_t);
+static ULONGLONG GetTickCount64() { return platform::MonotonicMilliseconds(); }
+#endif
 namespace {
 // Each original helper session retains its native connection manager. Origin
 // is idle-session affinity, not an origin-wide request lock. Broken framing
@@ -111,6 +118,10 @@ bool Acquire(const std::string& origin, ULONGLONG deadline, Lease* lease) {
 }
 bool NeckoHttp(const std::string& method, const std::string& url, const HeaderPairs& headers,
                const std::string& body, HttpResult* result, uint32_t timeoutMs) {
+#ifndef _WIN32
+  std::wstring python;
+  if (!NeckoPythonPath(&python)) return CurlHttp(method, url, headers, body, result, timeoutMs);
+#endif
   const ULONGLONG deadline = GetTickCount64() + timeoutMs;
   const std::string origin = OriginOf(url);
   // A helper can disappear between two requests (proxy tunnel reset, worker
@@ -153,6 +164,10 @@ bool NeckoHttp(const std::string& method, const std::string& url, const HeaderPa
 // Starts `count` helpers in the background so the first requests of a Context
 // do not wait for the helper's interpreter; each becomes an idle slot.
 void PrewarmNeckoSessions(size_t count) noexcept {
+#ifndef _WIN32
+  std::wstring python;
+  if (!NeckoPythonPath(&python)) return;
+#endif
   for (size_t i = 0; i < count; ++i) {
     Slot* slot = nullptr;
     {

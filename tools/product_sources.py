@@ -2,6 +2,7 @@
 
 import json
 import re
+import sys
 from provenance import write_if_changed
 
 # Domains compiled into dist/js.exe. Adding a src/<domain>/ directory without
@@ -92,6 +93,8 @@ def sources(root):
             raise ValueError(f"src/{domain} has unbuilt nested sources: "
                              + ", ".join(nested))
         for path in sorted(directory.glob("*.cpp")):
+            if sys.platform == "win32" and (path.stem.endswith("_posix") or path.stem == "openssl_backend"):
+                continue
             result.append((path, domain + "_" + path.stem))
     if not any(name.startswith("runtime_") for _, name in result):
         raise ValueError("src/runtime must contain implementation files")

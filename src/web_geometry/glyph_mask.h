@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-struct IDWriteFontFace;
+#include "runtime/font_face.h"
 struct DWRITE_GLYPH_RUN;
 
 namespace ruyijs::web_geometry {

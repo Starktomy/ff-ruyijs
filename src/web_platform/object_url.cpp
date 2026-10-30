@@ -5,14 +5,13 @@
 #include "js/Object.h"
 #include "js/Realm.h"
 #include "js/Wrapper.h"
-#include <windows.h>
-#include <bcrypt.h>
+#include "runtime/platform.h"
 
 namespace ruyijs::web_platform {
 namespace {
 bool Uuid(JSContext* cx, std::string* result) {
   unsigned char bytes[16];
-  if (BCryptGenRandom(nullptr, bytes, sizeof(bytes), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0)
+  if (!platform::RandomBytes(bytes, sizeof(bytes)))
     return WebKit::Fail(cx, "Object URL random source failed");
   bytes[6] = (bytes[6] & 15) | 64;
   bytes[8] = (bytes[8] & 63) | 128;

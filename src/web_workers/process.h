@@ -33,6 +33,11 @@ class Process final {
   Pipe pipe_;
   void* process_ = nullptr;
   void* job_ = nullptr;
+#ifndef _WIN32
+  int process_id_ = -1;
+  mutable bool reaped_ = false;
+  std::string directory_;
+#endif
 };
 }
 #endif

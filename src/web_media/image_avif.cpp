@@ -1,6 +1,10 @@
 // Source-owned libavif parses the container; dav1d performs actual AV1 decoding.
 #include "web_media/image_codec.h"
+#ifdef _WIN32
 #include "../../vendor/image-native/libavif/include/avif/avif.h"
+#else
+#include <avif/avif.h>
+#endif
 #include <cmath>
 #include <limits>
 #include <memory>
