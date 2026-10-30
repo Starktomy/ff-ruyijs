@@ -92,8 +92,11 @@ def serve(adapter, method, url, headers, body):
     if "Content-Length" not in fields and not body:
         prepared.headers.pop("Content-Length", None)
     control = RequestControl(BUDGET, max_attempts=ATTEMPTS)
+    # An explicit CA bundle supports private PKI and local TLS fixtures while
+    # retaining the same certificate and hostname verification path.
+    verify = os.environ.get("RUYIJS_TLS_CA_FILE") or True
     reader = open_response(adapter, prepared, control,
-                           timeout=(BUDGET, READ), verify=True, proxies=transport_proxies())
+                           timeout=(BUDGET, READ), verify=verify, proxies=transport_proxies())
     chunks, total = [], 0
     try:
         for chunk in reader:
