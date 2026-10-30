@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from provenance import write_if_changed
 import re
 import shutil
 import subprocess
@@ -33,14 +34,14 @@ def prepare(root, firefox):
                 'target_os = "macos"' in b.splitlines()[0]) or
             b.startswith('[build-dependencies.mozbuild]')))
         manifest = manifest.replace('gecko = ["mozbuild"]', 'gecko = []')
-        (target / "Cargo.toml").write_text(manifest)
+        write_if_changed(target / "Cargo.toml", manifest)
     # Narrow embedding ports: expose the owned NSS descriptor before starting
     # the handshake so the standalone adapter can apply its TLS profile.
     agent = crates / "nss-rs/src/agent.rs"
     text = (firefox / "third_party/rust/nss-rs/src/agent.rs").read_text()
     text = text.replace('impl SecretAgent {', 'impl SecretAgent {\n'
         '    pub fn standalone_fd(&mut self) -> *mut std::ffi::c_void { self.fd.cast() }', 1)
-    agent.write_text(text)
+    write_if_changed(agent, text)
     connection = crates / "neqo-transport/src/connection/mod.rs"
     text = (firefox / "third_party/rust/neqo-transport/src/connection/mod.rs").read_text()
     text = text.replace('    pub fn set_certificate_compression<',
@@ -51,7 +52,7 @@ def prepare(root, firefox):
         '    pub fn standalone_tp_style(&mut self, style: u8) {\n'
         '        self.tps.borrow_mut().local_mut().standalone_wire_style = style;\n    }\n\n'
         '    pub fn standalone_tls_fd(', 1)
-    connection.write_text(text)
+    write_if_changed(connection, text)
     tparams = crates / "neqo-transport/src/tparams.rs"
     text = (firefox / "third_party/rust/neqo-transport/src/tparams.rs").read_text()
     text = text.replace('pub struct TransportParameters {',
@@ -92,7 +93,7 @@ def prepare(root, firefox):
         }"""
     if old not in text:
         raise ValueError("Neqo transport-parameter embedding anchor changed")
-    tparams.write_text(text.replace(old,new,1))
+    write_if_changed(tparams, text.replace(old,new,1))
 
     source = root / "vendor/necko-native/quic"
     # Reuse Firefox's compatibility crates when its vendor inventory has moved
@@ -114,16 +115,16 @@ def prepare(root, firefox):
         'nss={package="nss-rs",path="crates/nss-rs",default-features=false}\n'
         '[patch.crates-io]\n' + ''.join(patch_lines) +
         '[profile.release]\nopt-level=2\ncodegen-units=1\n')
-    (build / "Cargo.toml").write_text(manifest)
+    write_if_changed(build / "Cargo.toml", manifest)
     lock = source / "Cargo.lock"
     if lock.is_file():
-        shutil.copy2(lock, build / "Cargo.lock")
+        write_if_changed(build / "Cargo.lock", lock.read_text())
     config = build / ".cargo/config.toml"
     config.parent.mkdir(exist_ok=True)
-    config.write_text('[source.crates-io]\nreplace-with="firefox"\n[source.firefox]\ndirectory=' +
+    write_if_changed(config, '[source.crates-io]\nreplace-with="firefox"\n[source.firefox]\ndirectory=' +
         json.dumps(str(firefox / "third_party/rust")) + '\n')
     records = root / "vendor/necko-native/neqo-upstream.json"
-    records.write_text(json.dumps({"firefox": "159.0", "neqo": "0.32.0", "nss-rs": "0.16.1",
+    write_if_changed(records, json.dumps({"firefox": "159.0", "neqo": "0.32.0", "nss-rs": "0.16.1",
         "sha256": inventory}, indent=2) + '\n')
     sdk = root / "build/necko/source/dist"
     if not sdk.exists():
@@ -149,8 +150,9 @@ def main():
     subprocess.run(command,
         cwd=build, env=env, check=True)
     target = root / "vendor/necko-native/python/necko/libnecko_quic.so"
-    shutil.copy2(build / "target/release/libnecko_quic.so", target)
-    shutil.copy2(build / "Cargo.lock", root / "vendor/necko-native/quic/Cargo.lock")
+    if not target.is_file() or target.read_bytes() != (build / "target/release/libnecko_quic.so").read_bytes():
+        shutil.copy2(build / "target/release/libnecko_quic.so", target)
+    write_if_changed(root / "vendor/necko-native/quic/Cargo.lock", (build / "Cargo.lock").read_text())
     print(target)
 
 

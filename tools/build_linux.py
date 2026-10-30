@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from provenance import write_if_changed
 import shutil
 import subprocess
 import sys
@@ -43,8 +44,8 @@ def build_urlpattern(root, donor, build):
                 "\ncrate-type = [\"rlib\"]\n"
                 "[dependencies]\nurlpattern = \"=0.6.0\"\nurl = \"2.5\"\n"
                 "[profile.release]\nopt-level = 2\npanic = \"abort\"\ncodegen-units = 1\n")
-    (directory / "Cargo.toml").write_text(manifest)
-    shutil.copyfile(source / "Cargo.lock", directory / "Cargo.lock")
+    write_if_changed(directory / "Cargo.toml", manifest)
+    write_if_changed(directory / "Cargo.lock", (source / "Cargo.lock").read_text())
     rustc, cargo = donor.substs["RUSTC"], donor.substs["CARGO"]
     rustc = rustc[0] if isinstance(rustc, list) else rustc
     cargo = cargo[0] if isinstance(cargo, list) else cargo
@@ -58,6 +59,9 @@ def build_urlpattern(root, donor, build):
     # The donor already owns Rust's allocator and standard runtime. Combining
     # the crate rlibs avoids a second std/init array from a Rust staticlib.
     archive = directory / "target/release/libruyijs_urlpattern.a"
+    members = sorted((directory / "target/release/deps").glob("*.rlib"))
+    if archive.is_file() and all(p.stat().st_mtime_ns <= archive.stat().st_mtime_ns for p in members):
+        return
     if archive.exists():
         archive.unlink()
     libraries = sorted((directory / "target/release/deps").glob("*.rlib"))

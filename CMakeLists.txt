@@ -12,9 +12,22 @@ find_package(PkgConfig REQUIRED)
 option(RUYIJS_FIREFOX_SKIA "Build the Firefox donor's Skia raster backend" ON)
 pkg_check_modules(NATIVE REQUIRED IMPORTED_TARGET harfbuzz fontconfig openssl libcurl libavif libbrotlidec libbrotlienc zlib libwebpdemux lcms2)
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(GLOB RUYIJS_SOURCE_INPUTS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/*/*.cpp")
+file(GLOB RUYIJS_GENERATED_INPUTS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tools/generated/*.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${PROJECT_SOURCE_DIR}/src/runtime/codec.js"
+  "${PROJECT_SOURCE_DIR}/tools/generate.py"
+  "${PROJECT_SOURCE_DIR}/tools/prepare_linux.py"
+  "${PROJECT_SOURCE_DIR}/tools/prepare_skia_linux.py"
+  "${PROJECT_SOURCE_DIR}/tools/product_sources.py"
+  "${PROJECT_SOURCE_DIR}/tools/sanitizer_data.py"
+  "${PROJECT_SOURCE_DIR}/profiles/firefox-environment.json"
+  "${RUYIJS_DONOR_OBJ}/config.status.json"
+  ${RUYIJS_GENERATED_INPUTS})
 execute_process(COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tools/prepare_linux.py"
   --donor-obj "${RUYIJS_DONOR_OBJ}" --output "${GENERATED}" COMMAND_ERROR_IS_FATAL ANY)
 include("${GENERATED}/sources.cmake")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DONOR_SOURCE}/gfx/skia/moz.build")
 # The upstream Skia adapter includes include/core/...; distribution headers
 # retain the directory beneath that prefix, rather than Skia's source root.
 if(RUYIJS_FIREFOX_SKIA)

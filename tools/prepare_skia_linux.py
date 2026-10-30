@@ -8,6 +8,7 @@ import argparse
 from collections import defaultdict
 import json
 from pathlib import Path
+from provenance import write_if_changed
 from types import SimpleNamespace
 
 
@@ -47,7 +48,7 @@ def prepare(firefox, output):
             continue
         lines += ['set_source_files_properties(' + json.dumps(str(directory / name)) +
                   ' PROPERTIES COMPILE_OPTIONS ' + json.dumps(';'.join(opts.flags)) + ')']
-    output.write_text('\n'.join(lines) + '\n')
+    write_if_changed(output, '\n'.join(lines) + '\n')
 
 
 if __name__ == '__main__':
