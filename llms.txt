@@ -1,0 +1,56 @@
+# ff-ruyijs
+
+> Run any site's JavaScript from Python — with the real Firefox engine.
+
+ff-ruyijs is a headless Firefox engine for Python. It embeds the genuine SpiderMonkey (Firefox 159) JavaScript engine and the Necko HTTP/1.1·2·3 networking stack in an isolated process, so Python code can execute a site's scripts, pass bot checks, and collect data — without a browser window, without a renderer, and without detection.
+
+## Install
+
+```
+pip install ruyijs
+```
+
+Requires Python 3.10+ on Windows x64. The wheel bundles the pinned native runtime.
+
+## Quick example
+
+```python
+from ruyijs import Context
+
+with Context() as ctx:
+    ctx.eval("let x = 40")
+    print(ctx.eval("x + 2"))           # 42
+    print(ctx.eval("navigator.userAgent"))
+```
+
+## Core API
+
+- Context(proxy=, timeout=) — create an isolated browser process
+- ctx.eval(src) — execute JS, return result
+- ctx.load_page(url, html) — load HTML with scripts and iframes
+- ctx.navigate(url) — top-level navigation
+- ctx.configure_fingerprint({navigator, screen, viewport, locale}) — set browser profile
+- ctx.configure_clock("logical"|"system") — deterministic or real time
+- ctx.advance(ms) — drive the event loop
+- ctx.set(name, value) — inject data into JS
+- ctx.expose(fn, name) — expose Python function to JS
+- ctx.put_resource(url, body) — serve responses offline
+- ctx.console_log() / ctx.net_log() — captured console and network records
+- JSError — JS exception (name, message, stack)
+- JSObject / JSFunction — live JS handles callable from Python
+
+## Verification systems it defeats
+
+Ruishu 5/6, Geetest, Tencent Captcha, Shumei, NetEase Yidun, Arkose Labs, Akamai Bot Manager 3.x, Alibaba 234/fireyejs, CreepJS (all sections).
+
+## License
+
+Dual-licensed: AGPL-3.0-only (free for any use that complies — distributing it or offering it over a network requires publishing your full source) or a commercial license from the author for closed-source use. See COMMERCIAL-LICENSE.md. Mozilla-derived code stays MPL-2.0.
+
+## Links
+
+- PyPI: https://pypi.org/project/ruyijs/
+- GitHub: https://github.com/cutetailbud/ff-ruyijs
+- Homepage: https://cutetailbud.github.io/ff-ruyijs/
+- Changelog: https://github.com/cutetailbud/ff-ruyijs/blob/main/CHANGELOG.md
+- Examples: `python -m ruyijs.examples` to list all

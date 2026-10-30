@@ -11,6 +11,7 @@
 <meta property="og:description" content="Run any site's JavaScript from Python — with the real Firefox engine.">
 <meta property="og:url" content="https://cutetailbud.github.io/ff-ruyijs/">
 <link rel="canonical" href="https://cutetailbud.github.io/ff-ruyijs/">
+<link rel="alternate" type="text/plain" title="llms.txt" href="https://cutetailbud.github.io/ff-ruyijs/llms.txt">
 <script>
 (() => {
   let mode = "system";
@@ -240,7 +241,7 @@ footer a:hover { color: var(--ink); }
         <code id="cmd">python -m pip install ruyijs</code>
         <button class="copy-btn" id="copy" data-i18n="hero.copy">Copy</button>
       </div>
-      <div class="meta-line" data-i18n="hero.meta">Windows x64 · Python 3.10+ · v0.1.8 · SpiderMonkey Firefox 158 · Necko HTTP/1.1·2·3</div>
+      <div class="meta-line" data-i18n="hero.meta">Windows x64 · Python 3.10+ · v0.2.1 · SpiderMonkey Firefox 159 · Necko HTTP/1.1·2·3</div>
     </div>
     <div class="term">
       <div class="term-top">
@@ -286,7 +287,7 @@ footer a:hover { color: var(--ink); }
     <h2 data-i18n="feat.h2">Firefox internals, not a browser impersonation.</h2>
     <p class="sub" data-i18n="feat.sub">Headless Chrome ships a GPU-rendering, window-managing process that vendors have spent years learning to detect. ruyiJS embeds only the internals that matter for automation.</p>
     <div class="grid">
-      <div><h3 data-i18n="f1.t">Authentic engine</h3><p data-i18n="f1.d">Genuine SpiderMonkey (Firefox 158) and the Necko network stack — the same bytecode, timers, and TLS fingerprint a real browser emits.</p></div>
+      <div><h3 data-i18n="f1.t">Authentic engine</h3><p data-i18n="f1.d">Genuine SpiderMonkey (Firefox 159) and the Necko network stack — the same bytecode, timers, and TLS fingerprint a real browser emits.</p></div>
       <div><h3 data-i18n="f2.t">Configurable fingerprint</h3><p data-i18n="f2.d">Set Navigator, Screen, viewport, timezone, and locale through one validated profile surface before the first page script runs.</p></div>
       <div><h3 data-i18n="f3.t">Per-context isolation</h3><p data-i18n="f3.d">Each Context is its own process with a persistent JavaScript world and its own proxy, so sessions stay isolated and reproducible.</p></div>
       <div><h3 data-i18n="f4.t">Deterministic clock</h3><p data-i18n="f4.d">Drive timers with a logical clock for perfectly reproducible runs, or switch to the system clock for live network work.</p></div>
@@ -447,7 +448,7 @@ const DICT = {
     "hero.lede": "新一代基于 Firefox 内核的无头浏览器。原生的 SpiderMonkey 引擎与 Necko 网络栈，没有窗口、没有渲染器 —— 专为网页抓取、JS 逆向、数据采集与绕过人机验证而生。",
     "hero.copy": "复制", "hero.copied": "已复制",
     "hero.cta1": "前往 PyPI 获取", "hero.cta2": "看看它能攻克什么",
-    "hero.meta": "Windows x64 · Python 3.10+ · v0.1.8 · SpiderMonkey Firefox 158 · Necko HTTP/1.1·2·3",
+    "hero.meta": "Windows x64 · Python 3.10+ · v0.2.1 · SpiderMonkey Firefox 159 · Necko HTTP/1.1·2·3",
     "pillar.1": "原生 Firefox JS 引擎 —— 非重新实现",
     "pillar.2": "原生 HTTP/1.1 · 2 · 3 传输，按上下文独立代理",
     "pillar.3": "38 个受限浏览器上下文：DOM、Worker、Canvas……",
@@ -457,7 +458,7 @@ const DICT = {
     "feat.kicker": "为什么是 RUYIJS",
     "feat.h2": "Firefox 内核本身，而非对浏览器的模仿。",
     "feat.sub": "Headless Chrome 启动的是一整个负责 GPU 渲染、管理窗口的进程，厂商已花多年时间学会识别它。ruyiJS 只嵌入与自动化真正相关的内核。",
-    "f1.t": "原生引擎", "f1.d": "货真价实的 SpiderMonkey（Firefox 158）与 Necko 网络栈 —— 与真实浏览器相同的字节码、定时器与 TLS 指纹。",
+    "f1.t": "原生引擎", "f1.d": "货真价实的 SpiderMonkey（Firefox 159）与 Necko 网络栈 —— 与真实浏览器相同的字节码、定时器与 TLS 指纹。",
     "f2.t": "可配置指纹", "f2.d": "在首个页面脚本运行前，通过一套带校验的 profile 接口设置 Navigator、Screen、视口、时区与区域。",
     "f3.t": "上下文隔离", "f3.d": "每个 Context 都是独立进程，拥有持续保存的 JavaScript 世界与自己的代理，会话彼此隔离、可复现。",
     "f4.t": "确定性时钟", "f4.d": "用逻辑时钟驱动定时器以获得完全可复现的运行，或切换系统时钟进行实时网络作业。",
