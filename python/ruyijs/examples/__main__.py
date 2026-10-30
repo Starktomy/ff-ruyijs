@@ -23,8 +23,9 @@ def _root():
 
 def _list():
     print("可用示例：")
-    for name, (_, description) in EXAMPLES.items():
+    for name, (relative, description) in EXAMPLES.items():
         print(f"  {name:<10} {description}")
+        print(f"    {_root() / relative}")
     print("\n运行：python -m ruyijs.examples NAME [NAME 参数]")
 
 

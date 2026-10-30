@@ -74,6 +74,7 @@ def read_log(context, report):
 def run(args, report):
     deadline = monotonic() + args.timeout
     with Context(proxy=report["proxy"], timeout=60) as context:
+        report["transport"] = f"ruyijs-page+{context.transport}(tls={context.tls})"
         context.configure_clock("system")
         context.navigate(URL)
         done = False
@@ -83,6 +84,8 @@ def run(args, report):
             except JSError as error:
                 if len(report["scriptErrors"]) < 20:
                     report["scriptErrors"].append(error.message[:300])
+                    report.setdefault("scriptErrorDetails", []).append({
+                        "name": error.name, "message": error.message, "stack": error.stack[:8000]})
             done = read_log(context, report)
         context.advance(500, max_tasks=500)  # the page renders its report after hashing
         read_log(context, report)

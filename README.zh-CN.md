@@ -1,3 +1,8 @@
+> 本分支已加入实验性的 [Linux x86_64 原生移植](LINUX.md)，使用 SpiderMonkey 159、
+> Unix socket、系统 Skia/字体，以及可选的原生 NSS 3.131 传输。
+> 上游 standalone Necko 适配层已支持 HTTP/1.1、HTTP/2、Neqo HTTP/3 和 Firefox TLS 配置；
+> Windows DirectWrite 像素一致性尚未完成，协议兼容范围见 Linux 文档。下文发行版说明对应 Windows 后端。
+
 <div align="center">
 
 # 🦊 ruyiJS

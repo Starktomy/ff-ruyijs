@@ -1,5 +1,14 @@
 include README.md LICENSE NOTICE pyproject.toml setup.py runtime.json
 include tools/wheel_runtime.py
+include CMakeLists.txt LINUX.md
+recursive-include tools *.py *.h
+recursive-include src *.cpp *.h *.inc *.js
+recursive-include profiles *.json
+recursive-include vendor/urlpattern-native *.rs Cargo.toml Cargo.lock
+recursive-include vendor/compression-native *.h
+recursive-include vendor/image-native *.h
+recursive-include vendor/necko-native *.cpp *.h *.py *.rs *.toml Cargo.lock *.json *.pem *.dat *.html *.txt *.md
+recursive-include native_tests *.py *.cpp *.md *.txt
 recursive-include python/ruyijs *.py
 include examples/README.md examples/google/google_search.py examples/boss/boss.py
 recursive-include examples/turnstile *.py *.md

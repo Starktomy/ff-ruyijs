@@ -1,5 +1,6 @@
 """Build a platform wheel containing the unchanged standalone runtime."""
 from pathlib import Path
+import json
 import platform
 import shutil
 import sys
@@ -31,19 +32,38 @@ class BuildPython(build_py):
         return sorted(set(outputs))
 
     def run(self):
-        if sys.platform != "win32" or platform.machine().lower() not in ("amd64", "x86_64"):
-            raise RuntimeError("ruyijs requires Windows x64 and a 64-bit Python installation")
+        linux = sys.platform.startswith("linux")
+        if (sys.platform != "win32" and not linux) or platform.machine().lower() not in ("amd64", "x86_64"):
+            raise RuntimeError("ruyijs requires Windows or Linux x86_64 and a 64-bit Python installation")
         if sys.maxsize <= 2 ** 32:
             raise RuntimeError("ruyijs requires 64-bit Python")
         super().run()
-        runtime = obtain_runtime(Path(__file__).resolve().parent)
         target = Path(self.build_lib) / "ruyijs/_runtime"
-        if target.exists():
-            validate(target)
-            if digest(target / "SHA256SUMS") != digest(runtime / "SHA256SUMS"):
-                raise ValueError(f"Build directory contains another runtime version: {target}")
+        if linux:
+            project = Path(__file__).resolve().parent
+            executable = project / "dist/js"
+            if not executable.is_file():
+                raise RuntimeError("Build the Linux runtime with tools/build_linux.py before building a wheel")
+            with executable.open("rb") as stream:
+                header = stream.read(20)
+            if header[:6] != b"\x7fELF\x02\x01" or header[18:20] != b"\x3e\x00":
+                raise RuntimeError("dist/js is not a native little-endian x86_64 ELF executable")
+            (target / "dist").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(executable, target / "dist/js")
+            for name in ("LICENSE", "NOTICE"):
+                shutil.copy2(project / name, target / name)
+            (target / "runtime.json").write_text(json.dumps({
+                "platform": "linux_x86_64", "engine": "SpiderMonkey 159", "transport": "libcurl",
+                "webcrypto": "OpenSSL", "graphics": "system Skia", "sha256": digest(executable)
+            }, indent=2) + "\n", encoding="utf-8")
         else:
-            shutil.copytree(runtime, target)
+            runtime = obtain_runtime(Path(__file__).resolve().parent)
+            if target.exists():
+                validate(target)
+                if digest(target / "SHA256SUMS") != digest(runtime / "SHA256SUMS"):
+                    raise ValueError(f"Build directory contains another runtime version: {target}")
+            else:
+                shutil.copytree(runtime, target)
         examples = Path(self.build_lib) / "ruyijs/examples"
         if examples.exists():
             shutil.rmtree(examples)
@@ -63,10 +83,10 @@ class PlatformWheel(bdist_wheel):
     def finalize_options(self):
         super().finalize_options()
         self.root_is_pure = False
-        self.plat_name = "win_amd64"
+        self.plat_name = "linux_x86_64" if sys.platform.startswith("linux") else "win_amd64"
 
     def get_tag(self):
-        return "py3", "none", "win_amd64"
+        return "py3", "none", self.plat_name
 
 
 setup(distclass=PlatformDistribution,

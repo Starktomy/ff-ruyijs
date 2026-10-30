@@ -217,6 +217,7 @@ def run(args, report):
     proxy = report["proxy"] if report["proxy"] != "direct" else None
 
     with Context(proxy=proxy, timeout=30, tls=args.tls) as ctx:
+        report["transport"] = f"ruyijs-spidermonkey159+{ctx.transport}(tls={ctx.tls})"
         script_errors = report["scriptErrors"]
 
         def tl():
@@ -230,7 +231,7 @@ def run(args, report):
             try:
                 ctx.advance(ms, max_tasks=mt)
             except JSError as e:
-                entry = {"name": e.name, "msg": str(e.message)[:200]}
+                entry = {"name": e.name, "msg": str(e.message)[:200], "stack": e.stack[:8000]}
                 if entry not in script_errors and len(script_errors) < 30:
                     script_errors.append(entry)
             except Exception as e:

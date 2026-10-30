@@ -89,12 +89,15 @@ def main():
     print(f"[*] proxy={selected or 'direct'}", flush=True)
 
     with Context(timeout=90, proxy=selected, environment=ENVIRONMENT) as context:
+        report["transport"] = f"ruyijs-page+{context.transport}(tls={context.tls})"
         def run(ms=50, tasks=200):
             try:
                 context.advance(ms, max_tasks=tasks)
             except JSError as error:
                 if len(report["scriptErrors"]) < 20:
                     report["scriptErrors"].append(f"{error.name}: {error.message[:200]}")
+                    report.setdefault("scriptErrorDetails", []).append({
+                        "name": error.name, "message": error.message, "stack": error.stack[:8000]})
 
         def ev(source):
             try:

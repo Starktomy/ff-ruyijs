@@ -1,3 +1,8 @@
+> This branch includes an experimental [native Linux x86_64 port](LINUX.md).
+> It uses SpiderMonkey 159, Unix sockets, system Skia/fonts and an optional native NSS 3.131 transport.
+> The standalone Necko adapter supports HTTP/1.1, HTTP/2, Neqo HTTP/3 and Firefox profile inputs; see the Linux guide for compatibility limits.
+> The Windows release documentation below describes the original backend.
+
 <div align="center">
 
 # 🦊 ruyiJS
