@@ -56,6 +56,7 @@ struct CanvasGlyphMask {
     std::vector<uint8_t> coverage;   // width*height, gamma-corrected A8
     uint8_t rgba[4] = {0, 0, 0, 0};  // straight palette colour
   };
+  std::vector<uint8_t> rgba; // Linux color glyphs, premultiplied RGBA
   std::vector<Layer> layers;  // non-empty for a colour glyph
   bool sampled = false;
   double origin_x = 0, origin_y = 0;

@@ -51,7 +51,7 @@
 #include "include/effects/SkGradient.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/private/base/SkTFitsIn.h"
-#ifndef RUYIJS_SYSTEM_SKIA
+#if !defined(RUYIJS_SYSTEM_SKIA) || defined(RUYIJS_FIREFOX_SKIA)
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskBlurFilter.h"
 #endif
@@ -824,13 +824,13 @@ int32_t BlurRadius(float sigma) {
   return static_cast<int32_t>(std::floor(sigma * kGaussianScaleFactor + 0.5f));
 }
 
-#ifndef RUYIJS_SYSTEM_SKIA
+#if !defined(RUYIJS_SYSTEM_SKIA) || defined(RUYIJS_FIREFOX_SKIA)
 void FreeBlurredMask(const void*, void* image) { SkMaskBuilder::FreeImage(image); }
 #endif
 
 // GaussianBlur::BlurAlphaMask.
 sk_sp<SkImage> BlurAlphaMask(SkImage* alphaImage, float sigma, SkPoint& offset) {
-#ifdef RUYIJS_SYSTEM_SKIA
+#if defined(RUYIJS_SYSTEM_SKIA) && !defined(RUYIJS_FIREFOX_SKIA)
   // Distribution Skia exposes image filters, but not the private mask ABI.
   // Callers already use the public Gaussian filter when no private mask exists.
   (void)alphaImage; (void)sigma; (void)offset;
@@ -1326,6 +1326,7 @@ void DrawRuns(SkCanvas* canvas, const Matrix& base, const TextRun* runs, size_t 
     // not permit subpixel AA, so the edging is grayscale.
     paint.paint.setAntiAlias(true);
     SkFont font(typeface, size);
+    font.setEmbolden(run.syntheticBold);
     font.setEdging(SkFont::Edging::kAntiAlias);
     // ScaledFontDWrite::SetupSkFontDrawOptions (canvas text never forces GDI).
     font.setEmbeddedBitmaps(Settings().mode == 0 /* DWRITE_RENDERING_MODE_DEFAULT */ &&

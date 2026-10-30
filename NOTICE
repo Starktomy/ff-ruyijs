@@ -25,6 +25,10 @@ releases (each release collects every license text under licenses/). Each is und
 own license:
 
   - Mozilla SpiderMonkey / Necko / Firefox        MPL-2.0
+  - Skia (Firefox 159 source, milestone 149)        BSD-3-Clause
+  - stb_image (native Linux codecs)                MIT OR Unlicense
+  - libwebp / LittleCMS2 / Fontconfig / FreeType     their respective licenses
+  - OpenSSL (native Linux WebCrypto)               Apache-2.0
   - HarfBuzz                                       Old MIT
   - encoding_rs (src/web_platform/encoding_rs/)    Apache-2.0 OR MIT
   - Brotli                                         MIT

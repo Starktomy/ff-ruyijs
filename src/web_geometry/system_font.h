@@ -56,6 +56,7 @@ struct CanvasTextMetrics {
 struct CanvasGlyphRun {
   IDWriteFontFace* face = nullptr;
   bool syntheticItalic = false;
+  bool syntheticBold = false;
   // gfxDWriteFont::GetScaledFont's useEmbeddedBitmap without the rendering
   // mode test: a CJK font (OS/2 code pages) with an EBLC strike at the size.
   bool cjkBitmapStrike = false;

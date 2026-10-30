@@ -156,6 +156,10 @@ bool Shape(FontCollection& fonts, const std::u16string& text, const FontInput& i
     // Same 16.16 shaper input and per-glyph app-unit rounding as Windows.
     hb_font_set_scale(font, int(std::round(*size * 65536)), int(std::round(*size * 65536)));
     hb_font_set_ppem(font, unsigned(*size), unsigned(*size));
+    const bool syntheticItalic = input.italic && !typeface->isItalic();
+    const bool syntheticBold = input.weight >= 600 && typeface->fontStyle().weight() < 600;
+    if (syntheticItalic) hb_font_set_synthetic_slant(font, .249328f);
+    if (syntheticBold) hb_font_set_synthetic_bold(font, .02f, 0, false);
     hb_buffer_t* buffer = hb_buffer_create();
     hb_buffer_add_utf16(buffer, reinterpret_cast<const uint16_t*>(text.data()), int(text.size()), unsigned(start), int(end-start));
     const std::string language = FontLanguage(input);
@@ -166,6 +170,11 @@ bool Shape(FontCollection& fonts, const std::u16string& text, const FontInput& i
     const auto* infos = hb_buffer_get_glyph_infos(buffer, &count);
     const auto* positions = hb_buffer_get_glyph_positions(buffer, &count);
     CanvasGlyphRun run;
+    run.syntheticItalic = syntheticItalic;
+    run.syntheticBold = syntheticBold;
+    run.colorFont = typeface->getTableSize(SkSetFourByteTag('C','O','L','R')) ||
+        typeface->getTableSize(SkSetFourByteTag('C','B','D','T')) ||
+        typeface->getTableSize(SkSetFourByteTag('s','b','i','x'));
     run.face = typeface.release();
     run.origin_x = input.x;
     run.origin_y = input.y;
@@ -245,6 +254,8 @@ bool SystemFonts::MeasureCanvas(const std::u16string& text, const FontInput& inp
     auto* face = Face(*collection_, run.face);
     auto* font = hb_font_create(face);
     hb_ot_font_set_funcs(font);
+    if (run.syntheticItalic) hb_font_set_synthetic_slant(font, .249328f);
+    if (run.syntheticBold) hb_font_set_synthetic_bold(font, .02f, 0, false);
     const auto units = hb_face_get_upem(face);
     hb_font_set_scale(font, units, units);
     const double factor = double(size) / units / input.scale;
@@ -353,6 +364,10 @@ bool SystemFonts::BuildCanvasTextPath(const std::u16string& text, const FontInpu
   if (!Shape(*collection_, text, input, &runs.values, &size)) return false;
   for (const auto& run : runs.values) {
     SkFont font(sk_ref_sp(run.face), size);
+    font.setSubpixel(true);
+    font.setEdging(SkFont::Edging::kAntiAlias);
+    font.setSkewX(run.syntheticItalic ? -.249328f : 0);
+    font.setEmbolden(run.syntheticBold);
     for (size_t i = 0; i < run.glyphs.size(); ++i) {
       auto path = font.getPath(run.glyphs[i]);
       if (!path) continue;
@@ -374,12 +389,16 @@ bool SystemFonts::BuildCanvasTextPath(const std::u16string& text, const FontInpu
   return true;
 }
 bool SystemFonts::BuildCanvasGlyphMasks(const std::u16string& text, const FontInput& input, const float matrix[6],
-                                      const uint8_t[3], std::vector<CanvasGlyphMask>* out) {
+                                      const uint8_t rgb[3], std::vector<CanvasGlyphMask>* out) {
   Runs runs;
   float size;
   if (!Shape(*collection_, text, input, &runs.values, &size)) return false;
   for (const auto& run : runs.values) {
     SkFont font(sk_ref_sp(run.face), size);
+    font.setSubpixel(true);
+    font.setEdging(SkFont::Edging::kAntiAlias);
+    font.setSkewX(run.syntheticItalic ? -.249328f : 0);
+    font.setEmbolden(run.syntheticBold);
     const SkMatrix transform = Matrix(matrix);
     for (size_t i = 0; i < run.glyphs.size(); ++i) {
       SkRect box;
@@ -389,21 +408,24 @@ bool SystemFonts::BuildCanvasGlyphMasks(const std::u16string& text, const FontIn
       const SkIRect rect = box.makeOutset(1, 1).roundOut();
       if (rect.isEmpty()) continue;
       if (rect.width() > 32768 || rect.height() > 32768 || int64_t(rect.width()) * rect.height() > 64000000) return false;
-      auto surface = SkSurfaces::Raster(SkImageInfo::MakeA8(rect.width(), rect.height()));
+      const auto image = run.colorFont ? SkImageInfo::Make(rect.width(),rect.height(),kRGBA_8888_SkColorType,kPremul_SkAlphaType)
+                                      : SkImageInfo::MakeA8(rect.width(), rect.height());
+      auto surface = SkSurfaces::Raster(image);
       if (!surface) return false;
       auto* canvas = surface->getCanvas();
       canvas->clear(SK_ColorTRANSPARENT);
       canvas->translate(float(-rect.left()), float(-rect.top()));
       canvas->concat(transform);
       SkPaint paint;
-      paint.setColor(SK_ColorWHITE);
+      paint.setColor(run.colorFont ? SkColorSetRGB(rgb[0],rgb[1],rgb[2]) : SK_ColorWHITE);
       paint.setAntiAlias(true);
       SkPoint position = SkPoint::Make(float(run.x[i]), float(run.y[i]));
       canvas->drawGlyphs(SkSpan(&run.glyphs[i], 1), SkSpan(&position, 1), SkPoint::Make(0, 0), font, paint);
       CanvasGlyphMask mask;
       mask.left = rect.left(); mask.top = rect.top(); mask.width = rect.width(); mask.height = rect.height();
-      mask.coverage.resize(size_t(mask.width) * mask.height);
-      if (!surface->readPixels(SkImageInfo::MakeA8(mask.width, mask.height), mask.coverage.data(), size_t(mask.width), 0, 0)) return false;
+      auto& pixels = run.colorFont ? mask.rgba : mask.coverage;
+      pixels.resize(image.computeMinByteSize());
+      if (!surface->readPixels(image,pixels.data(),image.minRowBytes(),0,0)) return false;
       out->push_back(std::move(mask));
     }
   }

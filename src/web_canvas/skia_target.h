@@ -122,6 +122,7 @@ bool StrokeRect(const Surface& surface, const double transform[6], const double 
 struct TextRun {
   ::IDWriteFontFace* face = nullptr;
   bool syntheticItalic = false;
+  bool syntheticBold = false;
   bool cjkBitmapStrike = false;
   double originX = 0, originY = 0;
   const uint16_t* glyphs = nullptr;

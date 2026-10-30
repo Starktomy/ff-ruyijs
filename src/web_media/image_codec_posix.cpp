@@ -1,3 +1,4 @@
+#ifndef RUYIJS_FIREFOX_SKIA
 // Native Skia image codecs return the same premultiplied BGRA frame contract.
 #include "web_media/image_codec.h"
 #include "include/codec/SkCodec.h"
@@ -86,3 +87,5 @@ domain::web_media::ImageDecodeStatus DecodeImageBytes(const std::string& type, c
   } catch (const std::bad_alloc&) { return Status::OutOfMemory; }
 }
 }
+
+#endif
