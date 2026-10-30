@@ -117,3 +117,39 @@ source/runtime overrides removed:
 
 CreepJS also records zero console errors. Live example times remain individual
 network/probe observations; they are not used as the controlled speedup benchmark.
+
+## Cloudflare public test-key integration
+
+The new `python -m ruyijs.examples cloudflare` entry loads the unmodified live
+Turnstile API with Cloudflare's public test sitekeys on a local document. Widget
+resources use native NSS transport; the Python host calls Siteverify over HTTPS
+with public test secrets. No production keys or existing solver patches are used.
+
+A fresh wheel installation under `/tmp/ruyijs-cloudflare-native` passes all six
+scenarios below. Commands run from `/tmp` with `-I`, no `PYTHONPATH`, no
+`RUYIJS_SHELL`, and no `RUYIJS_NATIVE_NECKO_PYTHON` override. The installed registry
+and packaged example/README were checked. All six runs recorded zero script and
+console errors and requested a widget challenge document.
+
+| Case | Verification mode | Widget outcome | Siteverify | Elapsed |
+| --- | --- | --- | --- | --- |
+| pass | pass | passed, dummy response field matches | success | 3.788 s |
+| fail | pass | failed as expected | not called | 3.389 s |
+| invisible | pass | passed, dummy response field matches | success | 3.773 s |
+| fail-invisible | pass | failed as expected | not called | 3.319 s |
+| pass | reject | passed, dummy response field matches | invalid-input-response | 3.811 s |
+| pass | spent | passed, dummy response field matches | timeout-or-duplicate | 3.785 s |
+
+`ok`/exit 0 means that the selected scenario matched its expected outcome; it
+does not mean a deliberately failing widget passed. Four invalid CLI inputs
+were rejected before runtime creation. Changed Python sources pass pyflakes and
+the patch passes whitespace checks. The runtime itself is unchanged from the
+performance build, so the full native engine suite was not repeated here.
+
+Wheel size: 72,156,002 bytes; SHA256
+`4c2c7ab404877cd3fb19028de8ed9b71eeee88a6ecc054167656351a8d080f4b`.
+Detailed results remain in ignored `artifacts/cloudflare-installed/` and its
+aggregate summary. These are individual live integration observations, not a
+performance benchmark. Public dummy-key documents differ from production
+challenges, so this does not establish real-site challenge compatibility or
+resolve the historical Wine widget-initialization report.

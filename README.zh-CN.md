@@ -224,6 +224,7 @@ python -m ruyijs.examples                      # 列出全部示例及其安装�
 python -m ruyijs.examples akamai               # Akamai Bot Manager 3.x
 python -m ruyijs.examples datadome             # DataDome interstitial device-check
 python -m ruyijs.examples creepjs              # CreepJS 指纹审计
+python -m ruyijs.examples cloudflare           # Turnstile 官方测试密钥集成
 ```
 
 示例均支持 `--direct`（直连）和 `--proxy http://127.0.0.1:7890`，在名称后加 `--help` 查看全部参数，`--output result.json` 可保存结果。各示例目录内附 README。

@@ -8,6 +8,7 @@ EXAMPLES = {
     "akamai": ("akamai/akamai.py", "Akamai Bot Manager 3.x"),
     "datadome": ("DataDome/datadome.py", "DataDome 设备检测"),
     "creepjs": ("creepjs/creepjs.py", "CreepJS"),
+    "cloudflare": ("cloudflare/turnstile.py", "Cloudflare Turnstile (official test keys)"),
 }
 
 

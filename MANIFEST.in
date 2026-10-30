@@ -12,6 +12,7 @@ recursive-include native_tests *.py *.cpp *.md *.txt
 recursive-include python/ruyijs *.py
 include examples/README.md examples/google/google_search.py examples/boss/boss.py
 recursive-include examples/turnstile *.py *.md
+recursive-include examples/cloudflare *.py *.md
 include examples/网上房地产/fangdi.py examples/网上房地产/README.md
 prune python/ruyijs/_runtime
 global-exclude __pycache__ *.pyc *.pyo
