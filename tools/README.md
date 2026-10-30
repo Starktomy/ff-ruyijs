@@ -145,3 +145,11 @@
 | `provenance.py` | SHA-256 与输入身份复验 |
 | `wheel_runtime.py` | `setup.py` 打包 wheel 时下载并校验 `runtime.json` 固定的运行时 |
 | `generated/` | 从 Firefox 159 浏览器构建生成的两个头文件 |
+
+## Linux 原生构建与打包
+
+Linux 路径详见 `LINUX.md`。`build_linux.py` 使用 Linux SpiderMonkey donor，
+并通过 `prepare_skia_linux.py` 从同一 Firefox 159 源码构建 Skia 149 栅格后端。
+`build_necko_linux.py --http3` 构建 NSS/NSPR 与 Neqo。`bundle_linux.py` 将 ELF、
+C ABI 客户端、独立 CPython helper、NSS/Neqo 和非 glibc 依赖库打包，重写相对路径，
+供 Linux wheel 或可搬迁目录使用。该产物仍具有构建机的 glibc/CPU 要求。

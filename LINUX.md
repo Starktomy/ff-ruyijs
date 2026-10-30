@@ -11,11 +11,13 @@ release:
 | --- | --- | --- |
 | JavaScript, Intl, Wasm | Official SpiderMonkey 159 donor | Same engine release as the original |
 | DOM, iframe realms, events, Worker | Existing ruyijs C++ owners | Native process and socket adapters |
-| Canvas | Distribution Skia 146 | Public Skia filters replace private mask calls; pixel parity is not claimed |
-| Fonts | Fontconfig, FreeType, HarfBuzz | Uses installed font files; metrics and rasterization differ from DirectWrite |
+| Canvas | Firefox 159 donor Skia 149 | Mozilla raster/gamma configuration and private alpha-mask blur; Windows pixel parity still needs a baseline |
+| Fonts | Fontconfig, FreeType, HarfBuzz | Native shaping, color glyphs and synthetic styles; uses actual installed font files |
 | WebCrypto | OpenSSL 3 | AES, SHA, HMAC, ECDSA and ECDH use native cryptographic implementations |
-| HTTP(S) | Standalone Necko adapter with native NSS 3.131 / NSPR 4.40 | HTTP/1.1, HTTP/2, upstream Firefox 100–159 TCP profile inputs and modern HTTP/3 with Neqo 0.32.0; client certificates remain unavailable |
-| WebTransport | Upstream surface | The Linux QUIC bridge rejects this explicitly; not implemented |
+| HTTP(S) | Standalone Necko adapter with native NSS 3.131 / NSPR 4.40 | H1/H2, client certificates, Firefox 100–159 HTTP/3 profiles through Neqo 0.32.0 |
+| WebTransport | Native Neqo/NSS over UDP | JS and Python sessions, bidi/uni streams, datagrams, groups, stats, reset/stop, exporter |
+| C ABI | libruyijs_client.so | POSIX processes, private sockets, callbacks and bounded RPC |
+| Images | stb_image, libwebp, libavif, LittleCMS2 | PNG/JPEG/GIF/BMP/ICO/WebP/AVIF, APNG/WebP animation and encoded ICC conversion |
 
 The NSS helper is optional and uses a private Python 3.14+ environment. When it
 has been built, page loads, fetch and XHR use the original helper pool and the
@@ -34,15 +36,15 @@ fingerprints have not been established by these functional tests.
 ## Build
 
 The initial build was verified on Ubuntu x86_64 with Python 3.14, clang 21,
-Rust 1.93.1, CMake 4.2, Skia 146 and OpenSSL 3. Other distributions must provide
-compatible versions of the dependencies, particularly Skia's public API.
+Rust 1.93.1, CMake 4.2 and OpenSSL 3. The default raster backend is compiled
+from the pinned Firefox source, rather than a distribution Skia ABI.
 
 ```bash
 apt-get install --no-install-recommends \
   clang lld llvm-21 rustc cargo autoconf2.13 pkg-config ninja-build cmake \
   libffi-dev libicu-dev zlib1g-dev libreadline-dev libssl-dev \
-  libfontconfig1-dev libfreetype-dev libharfbuzz-dev libskia-dev \
-  libcurl4-openssl-dev libavif-dev libbrotli-dev
+  libfontconfig1-dev libfreetype-dev libharfbuzz-dev libharfbuzz-subset0 \
+  libcurl4-openssl-dev libavif-dev libbrotli-dev libwebp-dev libstb-dev liblcms2-dev patchelf
 
 cargo install cbindgen --version 0.29.4 --locked
 ```
@@ -89,10 +91,18 @@ The QUIC bridge compiles the Firefox source archive's Neqo 0.32.0 and nss-rs
 adapter's native JSON ABI and UDP attachment, leaving the HTTP/Cookie owners
 unchanged. Cargo builds offline against Firefox's vendored dependencies and
 compatibility crates, using the retained `vendor/necko-native/quic/Cargo.lock`.
-The bridge supports the modern profile family (Firefox 139–159) and explicitly
-rejects legacy transport-parameter shuffling; the original race then selects a
-TCP route. Exact version-by-version Windows QUIC fingerprint parity is not
-claimed. WebTransport remains explicitly unsupported.
+The bridge supports Firefox 100–159 profile inputs. Transport parameters use
+fixed order for 139+, NSS-randomized order for 124–138, the draft
+version_information ID for 106–123, and omit it for 100–105. Tests inspect the
+ClientHello transport extension on an independent aioquic server. Historical
+Firefox binaries used older Neqo implementations: full version-by-version wire
+equivalence, including historical MTU behaviour, is not claimed.
+
+WebTransport uses the same native Neqo library and upstream helper/session
+owners. The JS surface and direct Python adapter are tested against an independent
+aioquic echo server. Both stream directions, datagrams, send groups/order, stats,
+TLS exporter and cleanup are covered. Certificate/hostname validation is retained;
+explicit certificate hashes use the upstream ECDSA P-256/14-day verification path.
 
 HTTP/3 is selected after an HTTPS origin advertises Alt-Svc. As in the upstream
 adapter, QUIC races a delayed TCP connection and can fall back if UDP is
@@ -152,12 +162,20 @@ python3 -m pip wheel --no-deps . -w build/native-wheels
 ```
 
 The resulting wheel has a `linux_x86_64` platform tag. It bundles the ELF shell
-and records its backend metadata in `ruyijs/_runtime/runtime.json`. Its dynamic
-libraries come from the host system. It is not advertised as a manylinux wheel
-and does not download the Windows runtime. The Windows wheel path is retained.
-The native NSS helper is currently a separate source-build component; this wheel
-does not bundle its private Python environment. Set
-`RUYIJS_NATIVE_NECKO_PYTHON` to use it with an installed wheel.
+and records its backend metadata in `ruyijs/_runtime/runtime.json`. It contains the shell, C client, a private native CPython 3.14 interpreter,
+standard library, Python transport dependencies, NSS/Neqo and the non-glibc
+dynamic library closure. Python search paths and ELF runpaths are relative to
+the installed location; the build venv and its absolute .pth are not copied.
+It is a host-glibc bundle, not a manylinux wheel. The build host's glibc/CPU
+requirements, installed fonts and OS trust/configuration remain relevant.
+No Windows runtime is downloaded for the Linux wheel. The Windows build path
+is retained. Build the NSS helper before building a Linux wheel.
+
+A portable directory can also be created with
+`python3 tools/bundle_linux.py --output build/linux-bundle`. The bundle records
+library names, build glibc and file SHA256 values in runtime.json. Test an
+installed wheel from outside the checkout with
+`vendor/necko-linux/bin/python3 -I -B native_tests/installed_probe.py --python /path/to/venv/bin/python3`.
 
 ## Windows Profiles
 
@@ -203,8 +221,15 @@ and PNG hashes for Latin, combining marks, CJK, emoji, RTL and empty strings.
 It compares metrics and pixels independently of PNG serialization. No Windows
 baseline or Windows font pack was available for the initial Linux verification;
 therefore these fixes establish consistent shaping/measurement, not completed
-Windows pixel alignment. FreeType versus DirectWrite and Skia version differences
-remain material.
+Windows pixel alignment. FreeType versus DirectWrite remains material even though both builds now use
+the same Firefox Skia source release. Color bitmap/COLR fonts preserve their
+palette, and missing bold/italic faces use synthetic styles consistently in
+shaping, measurement and drawing. Tests isolate a single regular font to verify
+the synthetic paths. Encoded PNG/JPEG/WebP ICC profiles are converted with
+LittleCMS2; `colorSpaceConversion: "none"` bypasses conversion.
+`RUYIJS_COLOR_PROFILE=/path/display.icc` selects an explicit destination profile
+for those native decoding paths. This does not emulate a Windows desktop color
+configuration for every graphics API.
 Raw PNG hashes also include the upstream session-random `deBG` chunk. The probe
 reports a separate hash excluding that one chunk to identify metadata-only
 differences; it keeps the raw hash and does not change the runtime export.
@@ -245,3 +270,38 @@ serialization and cascade layers, registered custom properties, iframe navigatio
 timing, layout/spacing, Canvas language/color/shadow changes, WebGL extensions,
 the upstream smoke test/CI and the updated license documents. Linux supplies the
 new iframe monotonic-clock adapter and font letter-spacing/language behavior.
+
+## Native C client and TLS identities
+
+`dist/libruyijs_client.so` exports the same `ruyijs.h` ABI as the Windows DLL.
+Build it with the regular CMake build. Shell paths are UTF-8; each context owns
+its native process and private Unix socket. Use `ruyijs_free` for returned buffers
+and `ruyijs_alloc` for callback replies. Same-context callback reentry returns -2;
+a timeout permanently invalidates the context. It discovers the bundled NSS
+helper beside the shell, including when launched by a C host.
+
+Python contexts can select a PEM client identity:
+
+```python
+with Context(cert=("client-chain.pem", "client-key.pem"), tls=159) as ctx:
+    ctx.navigate("https://mtls.example.test/")
+```
+
+A single combined PEM path is also accepted. Keys must be unencrypted and match
+the leaf certificate. NSS imports temporary per-connection identities and supplies
+them on a server CertificateRequest; it does not write a certificate database.
+Tests require client authentication over H1/H2, reject missing/mismatched material,
+and exercise Context navigation. The upstream transport uses TCP for client
+identities; QUIC client authentication has not been added.
+
+## Scope of the remaining differences
+
+All Windows-only runtime entry points used by this Linux build have native
+adapters. Dedicated, shared and service worker processes run natively; the suite
+covers shared-port messages and service registration/activation/messages/unregister.
+Service worker fetch interception remains absent from the current upstream model.
+WebGL/WebGPU retain upstream's modeled implementations; this port does not replace
+them with a real Mesa/Vulkan/Dawn backend. These are engine feature limits, rather
+than calls into Windows binaries. DirectWrite rasterization and exact Windows
+font fallback still require separate comparison with matching fonts and a Windows
+baseline. Font/Canvas fingerprint equality is therefore not a completed claim.

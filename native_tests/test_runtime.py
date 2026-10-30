@@ -17,6 +17,31 @@ class RuntimeTests(unittest.TestCase):
     def context(self, **options):
         return Context(shell=SHELL, timeout=10, **options)
 
+    def test_shared_and_service_worker_processes(self):
+        with self.context() as ctx:
+            ctx.load_page('https://workers.test/', '<html><body></body></html>')
+            ctx.put_resource('https://workers.test/shared.js',
+                'onconnect=e=>{const p=e.ports[0];p.onmessage=m=>p.postMessage(m.data+1);p.start()}',
+                headers=[['Content-Type','text/javascript']])
+            ctx.put_resource('https://workers.test/sw.js',
+                "self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));"
+                "self.addEventListener('activate',e=>e.waitUntil(clients.claim()));"
+                "self.addEventListener('message',e=>e.source.postMessage(e.data+2));",
+                headers=[['Content-Type','text/javascript']])
+            ctx.eval("""globalThis.workerResults={};globalThis.shared=new SharedWorker('/shared.js');
+                shared.port.onmessage=e=>workerResults.shared=e.data;shared.port.start();shared.port.postMessage(40);
+                (async()=>{const r=await navigator.serviceWorker.register('/sw.js');
+                    await navigator.serviceWorker.ready;
+                    navigator.serviceWorker.onmessage=async e=>{workerResults.service=e.data;
+                        workerResults.unregistered=await r.unregister()};r.active.postMessage(40);
+                })().catch(e=>workerResults.error=String(e));void 0;""")
+            result = None
+            for _ in range(150):
+                ctx.advance(25)
+                result = ctx.eval('workerResults')
+                if result.get('unregistered') or result.get('error'): break
+            self.assertEqual(result, {'shared':41,'service':42,'unregistered':True})
+
     def test_elf_process_javascript_bridge_and_errors(self):
         with self.context() as ctx:
             self.assertEqual(Path(f"/proc/{ctx._process.pid}/exe").resolve(), SHELL)

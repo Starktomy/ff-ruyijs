@@ -62,11 +62,13 @@ Build the native NSS helper with `tools/build_necko_linux.py --firefox-source <F
 (Python 3.14+). Linux selects the standalone Necko adapter/NSS when present,
 otherwise libcurl. `RUYIJS_HTTP_BACKEND=necko` requires NSS; `curl` selects the fallback.
 Build HTTP/3 with `tools/build_necko_linux.py --firefox-source <source> --http3`;
-the Neqo 0.32.0/NSS bridge supports Alt-Svc upgrades for modern Firefox profiles.
+the Neqo 0.32.0/NSS bridge supports Alt-Svc upgrades for Firefox 100–159 profiles.
 Use `vendor/necko-linux/bin/python3 -m pip install -r native_tests/requirements.txt`
 to install the independent local QUIC test server.
-Crypto uses OpenSSL and fonts use Fontconfig/Skia. Legacy HTTP/3 parameter-order
-emulation, WebTransport and client TLS certificates remain unavailable. Windows rendering
+Crypto uses OpenSSL; Fontconfig/FreeType/HarfBuzz use Firefox 159 donor Skia 149.
+Linux now supports the C ABI .so, H1/H2 client TLS identities, legacy HTTP/3
+parameter ordering and native WebTransport. Wheels bundle the CPython/NSS/Neqo
+helper and non-glibc dependencies with relative paths. Windows rendering
 equivalence needs identical font files and a captured Windows baseline;
 do not claim DirectWrite pixel parity. `tools/rendering_probe.py` collects and
 compares all TextMetrics fields, Canvas RGBA, PNG hashes and DOM rectangles.

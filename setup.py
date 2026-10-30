@@ -1,6 +1,5 @@
 """Build a platform wheel containing the unchanged standalone runtime."""
 from pathlib import Path
-import json
 import platform
 import shutil
 import sys
@@ -48,14 +47,8 @@ class BuildPython(build_py):
                 header = stream.read(20)
             if header[:6] != b"\x7fELF\x02\x01" or header[18:20] != b"\x3e\x00":
                 raise RuntimeError("dist/js is not a native little-endian x86_64 ELF executable")
-            (target / "dist").mkdir(parents=True, exist_ok=True)
-            shutil.copy2(executable, target / "dist/js")
-            for name in ("LICENSE", "NOTICE"):
-                shutil.copy2(project / name, target / name)
-            (target / "runtime.json").write_text(json.dumps({
-                "platform": "linux_x86_64", "engine": "SpiderMonkey 159", "transport": "libcurl",
-                "webcrypto": "OpenSSL", "graphics": "system Skia", "sha256": digest(executable)
-            }, indent=2) + "\n", encoding="utf-8")
+            from bundle_linux import bundle
+            bundle(project, target)
         else:
             runtime = obtain_runtime(Path(__file__).resolve().parent)
             if target.exists():

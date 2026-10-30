@@ -33,12 +33,15 @@ pool. No extra persistent requests.Session or cookie jar is introduced.
 `quic/` implements the upstream native JSON ABI using Neqo 0.32.0 and nss-rs
 0.16.1 from the Firefox donor. `neqo-upstream.json` records original source hashes;
 `quic/Cargo.lock` pins dependencies. The build uses local source copies and two
-small embedding ports to configure the owned NSS socket before the handshake.
+small embedding ports and a per-connection transport-parameter encoding option to configure the owned NSS socket before the handshake.
 The original donor is unchanged. Neqo still implements the QUIC and HTTP/3
 protocols; the bridge owns UDP attachment, bounded calls and output frames.
-Modern Firefox profiles 139–159 can use HTTP/3. Legacy shuffled transport
-parameters, WebTransport and Linux client TLS certificate import are explicitly
-unsupported. The upstream alternative-route race can fall back to HTTP/2/TCP.
+Firefox 100–159 profiles can use HTTP/3, including NSS-randomized legacy
+transport parameter ordering and the older draft version_information ID.
+WebTransport uses native Neqo sessions, streams/datagrams, groups/order,
+statistics and TLS exporters. Linux NSS imports temporary client TLS identities
+for H1/H2; the upstream transport retains TCP routing for client certificates.
+The upstream alternative-route race can fall back to HTTP/2/TCP.
 This is not a complete Gecko/Necko build. Functional profile selection does not
 by itself prove identical ClientHellos to every Windows Firefox release.
 
@@ -50,9 +53,12 @@ python3 tools/build_neqo_linux.py --firefox-source /path/to/firefox-159.0
 vendor/necko-linux/bin/python3 -m pip install -r native_tests/requirements.txt
 vendor/necko-linux/bin/python3 -I -B native_tests/necko_probe.py
 vendor/necko-linux/bin/python3 -I -B native_tests/http3_probe.py
+vendor/necko-linux/bin/python3 -I -B native_tests/webtransport_probe.py
 ```
 
 All generated libraries, source copies and private Python dependencies remain
 under this checkout. `build/necko` contains the NSS/NSPR build; the original
-Firefox donor is unchanged. The Linux wheel currently requires this helper to
-be built/installed separately.
+Firefox donor is unchanged. Linux wheels include a relocatable private native
+CPython helper, these adapters and NSS/Neqo; build the helper before packaging.
+`Context(cert=...)` passes per-context PEM paths through the original transport;
+private keys are never included in network reports.
