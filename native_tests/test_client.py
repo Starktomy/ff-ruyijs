@@ -3,6 +3,7 @@ import ctypes as c
 import json
 from pathlib import Path
 import unittest
+import concurrent.futures
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 from ruyijs._values import decode, encode
@@ -84,6 +85,14 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(reentries, [-2])
         finally:
             self.lib.ruyijs_close(ctx)
+
+    def test_creator_thread_can_exit_before_context(self):
+        with concurrent.futures.ThreadPoolExecutor(1) as executor:
+            ctx,error=executor.submit(self.create).result()
+        self.assertTrue(ctx,error)
+        try:
+            self.assertEqual(decode(self.call(ctx,op='eval',code='6*7')[1]['value']),42)
+        finally:self.lib.ruyijs_close(ctx)
 
     def test_timeout_and_startup_failure(self):
         for mode, shell in ((b'bad', None), (b'default', b'/nonexistent/ruyijs')):

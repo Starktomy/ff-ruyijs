@@ -29,6 +29,9 @@ void ruyijs_context::Stop() {
     while (waitpid(process, nullptr, 0) < 0 && errno == EINTR) {}
     process = -1;
   }
+  { std::lock_guard guard(ownerLock); ownerStop = true; }
+  ownerWake.notify_all();
+  if (owner.joinable()) owner.join();
   if (pipe >= 0) { close(pipe); pipe = -1; }
   if (!directory.empty()) { unlink((directory + "/rpc.sock").c_str()); rmdir(directory.c_str()); directory.clear(); }
 }
@@ -75,15 +78,27 @@ bool ruyijs_context::Connect(const char* shell, const char* mode, std::string* e
   const char* args[] = {shell, "--ruyijs-rpc", name.c_str(), "--ruyijs-mode", mode, nullptr};
   int errors[2];
   if (pipe2(errors, O_CLOEXEC)) { *error = "Startup pipe creation failed"; return false; }
-  const auto pid = fork();
-  if (!pid) {
-    close(errors[0]);
-    if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != parent || setpgid(0, 0)) _exit(127);
-    const auto null = open("/dev/null", O_RDWR);
-    if (null >= 0) { dup2(null, 0); dup2(null, 1); dup2(null, 2); if (null > 2) close(null); }
-    execv(shell, const_cast<char* const*>(args));
-    const int failure = errno; const auto ignored = write(errors[1], &failure, sizeof(failure)); (void)ignored; _exit(127);
-  }
+  // Linux's parent-death signal follows the forking thread. The creator
+  // may be a short-lived thread-pool job, so retain a dedicated owner.
+  std::unique_lock ownerGuard(ownerLock);
+  owner = std::thread([&] {
+    const auto pid = fork();
+    if (!pid) {
+      close(errors[0]);
+      if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != parent || setpgid(0, 0)) _exit(127);
+      const auto null = open("/dev/null", O_RDWR);
+      if (null >= 0) { dup2(null, 0); dup2(null, 1); dup2(null, 2); if (null > 2) close(null); }
+      execv(shell, const_cast<char* const*>(args));
+      const int failure = errno; const auto ignored = write(errors[1], &failure, sizeof(failure)); (void)ignored; _exit(127);
+    }
+    { std::lock_guard guard(ownerLock); process = pid; ownerReady = true; }
+    ownerWake.notify_all();
+    std::unique_lock guard(ownerLock);
+    ownerWake.wait(guard,[this] { return ownerStop; });
+  });
+  ownerWake.wait(ownerGuard,[this] { return ownerReady; });
+  const auto pid = process;
+  ownerGuard.unlock();
   close(errors[1]);
   if (pid < 0) { close(errors[0]); *error = "Runtime process creation failed"; return false; }
   process = pid;

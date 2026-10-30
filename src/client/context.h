@@ -8,6 +8,8 @@
 #else
 #include <sys/types.h>
 #include <chrono>
+#include <condition_variable>
+#include <thread>
 using DWORD = uint32_t;
 using ULONGLONG = uint64_t;
 inline uint64_t GetTickCount64() {
@@ -28,6 +30,10 @@ struct ruyijs_context {
   int pipe = -1;
   pid_t process = -1;
   std::string directory;
+  std::thread owner;
+  std::mutex ownerLock;
+  std::condition_variable ownerWake;
+  bool ownerReady = false, ownerStop = false;
 #endif
   uint32_t timeout = 10000;
   bool active = false;
