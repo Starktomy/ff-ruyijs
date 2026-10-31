@@ -27,6 +27,14 @@ struct LayoutCache {
   using Attributes = std::vector<std::pair<std::u16string, std::u16string>>;
   std::vector<Attributes> attribute_lists;  // Per node: its attributes (for :has() reach).
   std::map<std::pair<uint64_t,uint64_t>,size_t> index;
+  struct ScopeStamp {
+    std::unique_ptr<JS::PersistentRootedObject> sample;
+    uint64_t value;
+  };
+  // The composed layout can span document and shadow cascade scopes. Keep
+  // native samples rooted for this one cached layout, and validate their
+  // current sheets before reusing either boxes or computed styles.
+  std::vector<ScopeStamp> scopes;
 };
 // HTMLElement offset* from one layout: border box without transforms, relative
 // to the offset parent's padding edge (or the initial containing block).
