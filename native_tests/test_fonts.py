@@ -15,6 +15,43 @@ from ruyijs import Context
 
 @unittest.skipUnless((ROOT / "dist/js").is_file(), "build native runtime first")
 class FontTests(unittest.TestCase):
+    def test_shared_font_caches_follow_profiles_and_frame_lifetimes(self):
+        snapshots = []
+        for family in ("DejaVu Sans", "DejaVu Sans Mono", "DejaVu Sans"):
+            with self.subTest(family=family), Context(shell=ROOT / "dist/js") as ctx:
+                ctx.configure_fingerprint({"fonts": {"serif": family}})
+                ctx.load_page("https://fonts.test/", "<html><body></body></html>")
+                ctx.eval("""globalThis.measure = function(doc) {
+                    const c=doc.createElement('canvas');c.width=240;c.height=60;
+                    const g=c.getContext('2d');g.font='24px serif';
+                    const text='AV e\\u0301 WWW iii';g.fillText(text,5,40);
+                    const m=g.measureText(text),p=g.getImageData(0,0,240,60).data;
+                    let hash=0;for(let i=0;i<p.length;i++)hash=(hash*31+p[i])>>>0;
+                    return [m.width,m.actualBoundingBoxLeft,m.actualBoundingBoxRight,
+                        m.fontBoundingBoxAscent,m.fontBoundingBoxDescent,hash];
+                };
+                globalThis.framesToTest=[];
+                for(let i=0;i<2;i++){
+                    const f=document.createElement('iframe');f.srcdoc='<!doctype html>';
+                    document.body.appendChild(f);framesToTest.push(f);
+                }""")
+                ctx.advance(10)
+                got = ctx.eval("[measure(document),...framesToTest.map(f=>measure(f.contentDocument))]")
+                self.assertEqual(got, [got[0]] * 3)
+                snapshots.append(got[0])
+                ctx.eval("framesToTest.forEach(f=>f.remove());framesToTest=[]")
+                ctx.collect_garbage()
+                self.assertEqual(ctx.eval("measure(document)"), got[0])
+                for _ in range(2):
+                    ctx.load_page("https://fonts.test/next", "<html><body></body></html>")
+                    width = ctx.eval("""(() => {
+                        const g=document.createElement('canvas').getContext('2d');
+                        g.font='24px serif';return g.measureText('AV e\\u0301 WWW iii').width;
+                    })()""")
+                    self.assertEqual(width, got[0][0])
+        self.assertNotEqual(snapshots[0], snapshots[1])
+        self.assertEqual(snapshots[0], snapshots[2])
+
     def test_empty_text_baselines_kerning_and_combining_marks(self):
         with Context(shell=ROOT / "dist/js") as ctx:
             ctx.load_page("https://fonts.test/", "<html><body></body></html>")
