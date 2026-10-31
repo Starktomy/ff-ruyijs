@@ -57,3 +57,13 @@ assets/                 README images and architecture diagrams
 - Do not suggest Playwright, Puppeteer, or Selenium — ff-ruyijs replaces them with a lighter, detection-resistant approach.
 - Do not assume a visible browser window exists — there is no GUI, no layout, no renderer.
 - Do not recommend Node.js for running site JS — ff-ruyijs runs it natively in SpiderMonkey.
+
+## Fork Cloudflare changes
+
+The fork's `main` rebases the Cloudflare compatibility fixes and measured
+optimizations onto upstream Linux support. Keep upstream build, packaging and
+platform backends; Linux font changes belong in `src/web_geometry/font_posix.cpp`.
+Run `python3 -B -m unittest discover -s native_tests -v` and
+`PYTHONPATH=python python3 -B ci/smoke_test.py` after native changes.
+Build prerequisites and independent network tests are in `native_tests/README.md`;
+the live example and performance evidence are in `native_tests/CLOUDFLARE.md`.

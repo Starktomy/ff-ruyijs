@@ -12,9 +12,31 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tls_fixture import Certificates, H1, Handler, Server
 from cryptography.x509.verification import VerificationError
-from necko.adapters import RoutingClient
-from necko.core_client import CoreClient, _hello_shape
-from ruyijs_necko import decode_body
+from requests import Request
+from requests.exceptions import SSLError
+from necko.adapters import HTTPAdapter
+from ruyijs_necko import Decoder, RequestControl
+
+
+class Client:
+    """Use the shipped Linux adapter, including its pool and TLS verifier."""
+    def __init__(self, firefox=None):
+        self.adapter = HTTPAdapter(firefox=firefox)
+
+    def fetch(self, method, url, headers, payload, budget):
+        request = Request(method, url, headers=dict(headers), data=payload or None).prepare()
+        return self.adapter.send(request, stream=True, timeout=budget,
+                                 verify=os.environ.get("NECKO_EXTRA_CA") or True)
+
+    def close(self):
+        self.adapter.close()
+
+
+def decode_body(payload, encoding):
+    limit = 8 * 1024 * 1024
+    decoder = Decoder([encoding or "identity"], RequestControl(10),
+                      encoded_limit=limit, decoded_limit=limit, intermediate_limit=limit)
+    return b"".join(decoder.iterate(payload[i:i + 65536] for i in range(0, len(payload), 65536)))
 
 
 def body(response):
@@ -46,7 +68,7 @@ class ContentDecodingChecks(unittest.TestCase):
         for payload in (self.compressed(b"x" * (limit + 1)),
                         self.compressed(b"x" * (limit + 1), size=True),
                         self.compressed(b"x" * limit) + self.compressed(b"y")):
-            with self.subTest(encoded_size=len(payload)), self.assertRaisesRegex(ValueError, "8 MiB"):
+            with self.subTest(encoded_size=len(payload)), self.assertRaisesRegex(ValueError, "limit"):
                 decode_body(payload, "zstd")
 
 
@@ -57,13 +79,20 @@ class TLSChecks(Certificates, unittest.TestCase):
         self.server.tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.server.tls.load_cert_chain(self.directory / "cert.pem", self.directory / "key.pem")
         self.server.tls.set_alpn_protocols(["h2", "http/1.1"])
+        self.hellos = []
+        self.server.tls._msg_callback = self.capture_hello
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.url = f"https://localhost:{self.server.server_address[1]}"
         self.environment = patch.dict(os.environ, {"NECKO_EXTRA_CA": str(self.ca)})
         self.environment.start()
-        self.client = CoreClient()
-        self.assertTrue(self.client.available)
+        self.client = Client()
+
+    def capture_hello(self, connection, direction, version, content_type, message_type, data):
+        if direction == "read" and content_type == 22 and message_type == 1:
+            from aioquic.buffer import Buffer
+            from aioquic.tls import pull_client_hello
+            self.hellos.append(pull_client_hello(Buffer(data=data)))
 
     def tearDown(self):
         self.client.close()
@@ -78,7 +107,7 @@ class TLSChecks(Certificates, unittest.TestCase):
             response = self.client.fetch("GET", self.url + path, [], b"", 4)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.raw.version, 11)
-            fields = response.raw.headers._list
+            fields = list(response.raw.headers.items())
             self.assertEqual(sum(name.lower() == "set-cookie" for name, _ in fields), 2)
             encoding = next((v for k, v in fields if k.lower() == "content-encoding"), "")
             self.assertEqual(decode_body(body(response), encoding), b"native-nss:")
@@ -93,35 +122,38 @@ class TLSChecks(Certificates, unittest.TestCase):
 
     def test_https_without_alpn_uses_http1(self):
         self.server.tls.set_alpn_protocols([])
-        client = RoutingClient()
+        client = Client()
         try:
             response = client.fetch("GET", self.url, [], b"", 4)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.raw.version, 11)
             self.assertEqual(body(response), b"native-nss:")
-            self.assertIsNone(client._fallback)
         finally:
             client.close()
 
     def test_actual_client_hello_profiles(self):
         for version, expected in (("100", (17, 6, 2)), ("159", (15, 5, 3))):
-            with patch.dict(os.environ, {"NECKO_FIREFOX": version}):
-                response = self.client.fetch("GET", self.url, [], b"", 4)
+            client = Client(firefox=version)
+            try:
+                response = client.fetch("GET", self.url, [], b"", 4)
                 self.assertEqual(response.status_code, 200)
-                shape = _hello_shape(self.client.last_hello)
-                self.assertEqual(tuple(shape[key] for key in
-                    ("cipher_count", "group_count", "key_share_count")), expected)
+                self.assertEqual(body(response), b"native-nss:")
+                hello = self.hellos[-1]
+                self.assertEqual((len(hello.cipher_suites), len(hello.supported_groups),
+                                  len(hello.key_share)), expected)
+            finally:
+                client.close()
 
     def test_untrusted_certificate_and_hostname_are_rejected(self):
         with patch.dict(os.environ, {"NECKO_EXTRA_CA": ""}):
-            untrusted = CoreClient()
+            untrusted = Client()
             try:
-                with self.assertRaises((ssl.SSLCertVerificationError, VerificationError)) as error:
+                with self.assertRaises((ssl.SSLCertVerificationError, VerificationError, SSLError)) as error:
                     untrusted.fetch("GET", self.url, [], b"", 4)
                 self.assertRegex(str(error.exception), "[Cc]ertificate|validation|issuer")
             finally:
                 untrusted.close()
-        with self.assertRaises((ssl.SSLCertVerificationError, VerificationError)) as error:
+        with self.assertRaises((ssl.SSLCertVerificationError, VerificationError, SSLError)) as error:
             self.client.fetch("GET", self.url.replace("localhost", "127.0.0.1"), [], b"", 4)
         self.assertRegex(str(error.exception), "[Cc]ertificate|validation|subjectAltName")
 
@@ -130,7 +162,7 @@ class TLSChecks(Certificates, unittest.TestCase):
         server.requests = 0
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        client = RoutingClient()
+        client = Client()
         try:
             response = client.fetch("POST", f"http://127.0.0.1:{server.server_port}/", [], b"linux", 4)
             self.assertEqual(response.status_code, 200)
@@ -145,16 +177,15 @@ class TLSChecks(Certificates, unittest.TestCase):
 class HTTP3Checks(unittest.TestCase):
     def test_http3_rejects_an_untrusted_certificate(self):
         from http3_fixture import Fixture
-        from necko.client import NeckoError
         fixture = Fixture()
         try:
             with patch.dict(os.environ, {"NECKO_EXTRA_CA": str(fixture.ca)}):
-                client = RoutingClient()
+                client = Client()
                 try:
                     first = client.fetch("GET", fixture.url + "/", [], b"", 4)
                     self.assertEqual(first.raw.version, 20)
                     with patch.dict(os.environ, {"NECKO_EXTRA_CA": ""}):
-                        with self.assertRaises((ssl.SSLCertVerificationError, VerificationError, NeckoError)) as error:
+                        with self.assertRaises((ssl.SSLCertVerificationError, VerificationError, SSLError)) as error:
                             client.fetch("GET", fixture.url + "/untrusted", [], b"", 4)
                         self.assertRegex(str(error.exception), "[Cc]ertificate|validation|issuer")
                 finally:
@@ -167,7 +198,7 @@ class HTTP3Checks(unittest.TestCase):
         fixture = Fixture()
         try:
             with patch.dict(os.environ, {"NECKO_EXTRA_CA": str(fixture.ca)}):
-                client = RoutingClient()
+                client = Client()
                 try:
                     first = client.fetch("GET", fixture.url + "/", [], b"", 4)
                     self.assertEqual(first.raw.version, 20)
