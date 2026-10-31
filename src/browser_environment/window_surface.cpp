@@ -212,8 +212,9 @@ bool InvalidCharacter(State& state) {
   return ThrowDOM(state, "InvalidCharacterError", "The string to be decoded is not correctly encoded");
 }
 // Both encodings read one stable string span. Decoding writes Latin-1 bytes
-// directly, avoiding whitespace-stripped and decoded UTF-16 copies plus the
-// engine's subsequent deflation of those decoded bytes.
+// directly, avoiding whitespace-stripped and decoded UTF-16 copies. Short
+// results use scratch space and the engine's nursery/inline string allocator;
+// large buffers transfer to the result without another copy.
 template <typename Char>
 bool EncodeBase64(const Char* input, size_t length, std::string* encoded) {
   encoded->reserve((length + 2) / 3 * 4);
@@ -292,14 +293,23 @@ bool Atob(State& state, const JS::CallArgs& args, JS::MutableHandleValue result)
   if (!input) return false;
   JS::AutoStableStringChars chars(cx);
   if (!chars.init(cx, input)) return false;
-  JS::UniqueLatin1Chars decoded(static_cast<JS::Latin1Char*>(JS_malloc(cx, chars.length() / 4 * 3 + 2)));
-  if (!decoded) return false;
+  const size_t capacity = chars.length() / 4 * 3 + 2;
+  // The donor's maximum nursery character buffer is 1024 bytes. Keep small
+  // decodes on that allocation path instead of giving every result a malloc.
+  std::array<JS::Latin1Char, 1024> scratch;
+  JS::UniqueLatin1Chars owned;
+  if (capacity > scratch.size()) {
+    owned.reset(static_cast<JS::Latin1Char*>(JS_malloc(cx, capacity)));
+    if (!owned) return false;
+  }
+  auto* decoded = owned ? owned.get() : scratch.data();
   size_t size = 0;
   const bool valid = chars.isLatin1()
-      ? DecodeBase64(chars.latin1Chars(), chars.length(), decoded.get(), &size)
-      : DecodeBase64(chars.twoByteChars(), chars.length(), decoded.get(), &size);
+      ? DecodeBase64(chars.latin1Chars(), chars.length(), decoded, &size)
+      : DecodeBase64(chars.twoByteChars(), chars.length(), decoded, &size);
   if (!valid) return InvalidCharacter(state);
-  JS::RootedString text(cx, JS_NewLatin1String(cx, std::move(decoded), size));
+  JS::RootedString text(cx, owned ? JS_NewLatin1String(cx, std::move(owned), size)
+      : JS_NewStringCopyN(cx, reinterpret_cast<const char*>(decoded), size));
   if (!text) return false;
   result.setString(text);
   return true;
