@@ -6,8 +6,11 @@
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "js/ArrayBuffer.h"
+#include "js/Array.h"
+#include "js/CallAndConstruct.h"
 #include "js/Conversions.h"
 #include "js/Exception.h"
+#include "js/GlobalObject.h"
 #include "js/PropertyAndElement.h"
 #include "js/Promise.h"
 #include "js/Realm.h"
@@ -16,6 +19,10 @@
 #include "js/experimental/TypedData.h"
 #include <cstdint>
 #include <span>
+#if defined(__linux__)
+#include "domain/font_loading/local_source.h"
+#include "web_geometry/system_font.h"
+#endif
 
 namespace ruyijs::font_loading {
 
@@ -111,6 +118,26 @@ bool Constructor(JSContext* cx, unsigned argc, JS::Value* vp) {
   JS::SetReservedSlot(object, kFontStatus, JS::StringValue(status));
   JS::SetReservedSlot(object, kFontLoadable, JS::BooleanValue(loadable));
   JS::SetReservedSlot(object, kFontPromise, JS::UndefinedValue());
+  JS::SetReservedSlot(object, kFontLocalSources, JS::UndefinedValue());
+#if defined(__linux__)
+  const bool binary = args[1].isObject() &&
+      (JS::IsArrayBufferObject(&args[1].toObject()) || JS_IsArrayBufferViewObject(&args[1].toObject()));
+  if (!binary) {
+    JS::RootedString source(cx, JS::ToString(cx, args[1]));
+    JS::UniqueChars text = source ? JS_EncodeStringToUTF8(cx, source) : nullptr;
+    if (!text) return false;
+    std::vector<std::string> names;
+    if (domain::font_loading::LocalSourceNames(text.get(), &names)) {
+      JS::RootedObject sources(cx, JS::NewArrayObject(cx, names.size()));
+      if (!sources) return false;
+      for (size_t index = 0; index < names.size(); ++index) {
+        JS::RootedString name(cx, JS_NewStringCopyN(cx, names[index].data(), names[index].size()));
+        if (!name || !JS_DefineElement(cx, sources, uint32_t(index), name, JSPROP_ENUMERATE)) return false;
+      }
+      JS::SetReservedSlot(object, kFontLocalSources, JS::ObjectValue(*sources));
+    }
+  }
+#endif
   for (const char* name : kFontDescriptorNames)
     if (!ApplyFontFaceDescriptor(cx, object, name, JS::UndefinedHandleValue, nullptr)) return false;
   if (args.length() >= 3 && args[2].isObject()) {
@@ -188,7 +215,25 @@ bool LoadFontFace(JSContext* cx, JS::HandleObject face, JS::MutableHandleObject 
   JS::RootedObject created(cx, JS::NewPromiseObject(cx, nullptr));
   if (!created) return false;
   JS::SetReservedSlot(face, kFontPromise, JS::ObjectValue(*created));
-  if (JS::GetReservedSlot(face, kFontLoadable).toBoolean()) {
+  bool loadable = JS::GetReservedSlot(face, kFontLoadable).toBoolean();
+  JS::RootedValue local(cx, JS::GetReservedSlot(face, kFontLocalSources));
+#if defined(__linux__)
+  if (local.isObject()) {
+    static thread_local web_geometry::SystemFonts fonts;
+    JS::RootedObject sources(cx, &local.toObject());
+    uint32_t length = 0;
+    if (!JS::GetArrayLength(cx, sources, &length)) return false;
+    for (uint32_t index = 0; index < length && !loadable; ++index) {
+      JS::RootedValue value(cx);
+      if (!JS_GetElement(cx, sources, index, &value)) return false;
+      JS::RootedString name(cx, value.toString());
+      JS::UniqueChars text = JS_EncodeStringToUTF8(cx, name);
+      if (!text) return false;
+      loadable = fonts.HasLocalFont(text.get());
+    }
+  }
+#endif
+  if (loadable) {
     JS::RootedString loaded(cx, JS_NewStringCopyZ(cx, "loaded"));
     if (!loaded) return false;
     JS::SetReservedSlot(face, kFontStatus, JS::StringValue(loaded));
@@ -197,7 +242,19 @@ bool LoadFontFace(JSContext* cx, JS::HandleObject face, JS::MutableHandleObject 
   } else {
     JS::RootedString error(cx, JS_NewStringCopyZ(cx, "error"));
     JS::RootedValue rejection(cx);
-    if (!error || !SyntaxErrorValue(cx, &rejection)) return false;
+    if (!error) return false;
+    if (local.isObject()) {
+      JS::RootedObject global(cx, JS::CurrentGlobalOrNull(cx));
+      JS::RootedValue constructor(cx);
+      JS::RootedObject exception(cx);
+      JS::RootedString message(cx, JS_NewStringCopyZ(cx, "No matching local font was found"));
+      JS::RootedString name(cx, JS_NewStringCopyZ(cx, "NetworkError"));
+      JS::RootedValueArray<2> values(cx);
+      if (!message || !name || !JS_GetProperty(cx, global, "DOMException", &constructor)) return false;
+      values[0].setString(message); values[1].setString(name);
+      if (!JS::Construct(cx, constructor, values, &exception)) return false;
+      rejection.setObject(*exception);
+    } else if (!SyntaxErrorValue(cx, &rejection)) return false;
     JS::SetReservedSlot(face, kFontStatus, JS::StringValue(error));
     if (!JS::RejectPromise(cx, created, rejection)) return false;
   }

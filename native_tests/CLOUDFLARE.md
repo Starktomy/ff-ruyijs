@@ -56,9 +56,20 @@ The full suite passes 37 cases and smoke checks pass. The original-page live
 attempt still returns `600010` (17.201 s), without a token or backend request.
 
 An instrumented diagnostic confirmed that the challenge probes installed fonts
-using `new FontFace(name, 'local("name")')`. The current binary-only source
-loader rejects every such source, explaining the empty font list. This is the
-next compatibility defect under investigation; it has not yet been fixed.
+using `new FontFace(name, 'local("name")')`. The binary-only source loader rejected every such source, explaining the empty
+font list. Linux now parses local-only source lists using the shared CSS token
+reader and resolves full/PostScript face names through the existing Fontconfig
+collection. It does not accept Fontconfig substitutions, honors font visibility
+profiles and rejects unavailable faces with `NetworkError`. Other platform
+source-loading behavior is retained; URL loading and rendering a local face
+under a different family name are outside this change.
+
+After the fix the challenge's font probe reports the same 11 installed faces
+as the successful Firefox reference, and its `enumerateDevices` check matches.
+The original-page attempt still returns `600010` (17.275 s), with no token or
+backend verification. The full suite passes 40 cases, including three new
+font cases, and smoke checks pass. The remaining diagnostics include WebGPU
+exposure and another differing boolean whose meaning is still unknown.
 
 ## Current live result
 
