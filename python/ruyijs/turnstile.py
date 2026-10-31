@@ -19,6 +19,7 @@ from ._values import JSError
 
 
 _ACTION = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+_CDATA = re.compile(r"^[a-zA-Z0-9_-]{1,255}$")
 _SITEKEY = re.compile(r"^[0-9A-Za-z_-]{16,255}$")
 
 
@@ -61,14 +62,16 @@ def _page() -> str:
     return """<!doctype html><html><head><meta name=viewport
       content="width=device-width,initial-scale=1"><title>Sign in</title></head><body>
       <div id=turnstile-target></div><script>
-      globalThis.ruyijsTurnstile={token:'',error:'',timedOut:false,rendered:false,
-        events:[],clicks:0};
+      globalThis.ruyijsTurnstile={token:'',error:'',rendered:false,generation:0,
+        events:[],clicks:0,targets:new WeakMap(),nextTarget:0};
       function ruyijsToken(value){ruyijsTurnstile.token=value;
+        ruyijsTurnstile.error='';
         ruyijsTurnstile.events.push({event:'token',length:value.length})}
-      function ruyijsError(code){ruyijsTurnstile.error=String(code);
+      function ruyijsError(code){ruyijsTurnstile.token='';ruyijsTurnstile.error=String(code);
         ruyijsTurnstile.events.push({event:'error',code:String(code)})}
-      function ruyijsExpired(){ruyijsTurnstile.events.push({event:'expired'})}
-      function ruyijsTimeout(){ruyijsTurnstile.timedOut=true;
+      function ruyijsExpired(){ruyijsTurnstile.token='';ruyijsTurnstile.generation++;
+        ruyijsTurnstile.events.push({event:'expired'})}
+      function ruyijsTimeout(){ruyijsTurnstile.token='';ruyijsTurnstile.generation++;
         ruyijsTurnstile.events.push({event:'timeout'})}
       </script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async>
       </script></body></html>""".replace("\n", " ")
@@ -103,15 +106,20 @@ _STATE = r'''(() => {
           const rect=input.getBoundingClientRect();
           if (rect.width>0 && rect.height>0) {
             const path=j ? inner.expression+'.querySelectorAll("*")['+(j-1)+']' : inner.expression;
-            targets.push(path);
+            let id=ruyijsTurnstile.targets.get(input);
+            if (id===undefined) {
+              id=++ruyijsTurnstile.nextTarget;
+              ruyijsTurnstile.targets.set(input,id);
+            }
+            targets.push({id,path});
           }
         }
       }
     }
   }
   return {ready:document.readyState, rendered:ruyijsTurnstile.rendered,
-    tokenLength:ruyijsTurnstile.token.length, error:ruyijsTurnstile.error,
-    timedOut:ruyijsTurnstile.timedOut, events:ruyijsTurnstile.events,
+    token:ruyijsTurnstile.token, error:ruyijsTurnstile.error,
+    generation:ruyijsTurnstile.generation, events:ruyijsTurnstile.events,
     api:typeof turnstile!=='undefined', frames:document.querySelectorAll('iframe').length,
     targets};
 })()'''
@@ -120,10 +128,6 @@ _STATE = r'''(() => {
 def _render_options(sitekey: str, action: str | None, cdata: str | None) -> dict[str, Any]:
     options: dict[str, Any] = {
         "sitekey": sitekey,
-        "callback": "ruyijsToken",
-        "error-callback": "ruyijsError",
-        "expired-callback": "ruyijsExpired",
-        "timeout-callback": "ruyijsTimeout",
         "theme": "light",
         "size": "normal",
         "appearance": "always",
@@ -141,47 +145,68 @@ def _solve_once(site_url: str, sitekey: str, *, action: str | None, cdata: str |
                 timeout: float, proxy: str | None, profile: dict[str, Any] | None,
                 shell: str | Path | None, poll_ms: int) -> TurnstileSolution:
     started = monotonic()
+    deadline = started + timeout
     events: list[dict[str, Any]] = []
     script_errors: list[str] = []
-    clicked: set[str] = set()
+    clicked: set[int] = set()
+    generation = 0
     rendered = False
     options = _render_options(sitekey, action, cdata)
 
-    with Context(shell=shell, timeout=min(30, timeout), proxy=proxy, tls="159") as context:
-        context.configure_clock("system")
-        if profile is not None:
-            context.configure_fingerprint(profile)
-        context.load_page(site_url, _page())
-        while monotonic() - started < timeout:
-            remaining = timeout - (monotonic() - started)
-            context.timeout = min(30, max(0.2, remaining))
+    try:
+        with Context(shell=shell, timeout=min(30, timeout), proxy=proxy, tls="159") as context:
+            def request(method, *args, **kwargs):
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("Turnstile attempt deadline reached")
+                context.timeout = min(30, remaining)
+                return method(*args, **kwargs)
+
             try:
-                context.advance(poll_ms, max_tasks=400)
-            except JSError as error:
-                script_errors.append(error.message)
-            state = json.loads(context.eval("JSON.stringify(" + _STATE + ")"))
-            events = state.get("events", [])
-            if not rendered and state.get("api"):
-                encoded = json.dumps(options, separators=(",", ":"))
-                for callback in ("ruyijsToken", "ruyijsError", "ruyijsExpired", "ruyijsTimeout"):
-                    encoded = encoded.replace(json.dumps(callback), callback)
-                context.eval("ruyijsTurnstile.widgetId=turnstile.render('#turnstile-target'," +
-                             encoded + ");ruyijsTurnstile.rendered=true")
-                rendered = True
-                continue
-            for target in state.get("targets", []):
-                if target not in clicked:
-                    clicked.add(target)
-                    context.eval("ruyijsTurnstile.clicks++")
-                    context.click(target)
-            if state.get("error"):
-                raise TurnstileError(f"Turnstile error {state['error']}",
-                                     code=state["error"], events=events)
-            if state.get("tokenLength"):
-                token = context.eval("ruyijsTurnstile.token")
-                if not isinstance(token, str) or len(token) < 200 or "DUMMY" in token:
-                    raise TurnstileError("Turnstile returned an invalid token", events=events)
-                return TurnstileSolution(token, monotonic() - started, 1)
+                request(context.configure_clock, "system")
+                if profile is not None:
+                    request(context.configure_fingerprint, profile)
+                request(context.load_page, site_url, _page())
+                while (remaining := deadline - monotonic()) > 0:
+                    try:
+                        # Leave time for the RPC response and state inspection.
+                        request(context.advance, min(poll_ms, remaining * 500), max_tasks=400)
+                    except JSError as error:
+                        script_errors.append(error.message)
+                    state = json.loads(request(context.eval, "JSON.stringify(" + _STATE + ")"))
+                    events = state.get("events", [])
+                    if state.get("error"):
+                        raise TurnstileError(f"Turnstile error {state['error']}",
+                                             code=state["error"], events=events)
+                    token = state.get("token")
+                    if token:
+                        if not isinstance(token, str) or len(token) < 200 or "DUMMY" in token:
+                            raise TurnstileError("Turnstile returned an invalid token", events=events)
+                        return TurnstileSolution(token, monotonic() - started, 1)
+                    if not rendered and state.get("api"):
+                        encoded = json.dumps(options, separators=(",", ":"))
+                        request(context.eval,
+                                "ruyijsTurnstile.widgetId=turnstile.render('#turnstile-target',"
+                                "Object.assign(" + encoded + ",{callback:ruyijsToken,"
+                                "'error-callback':ruyijsError,'expired-callback':ruyijsExpired,"
+                                "'timeout-callback':ruyijsTimeout}));ruyijsTurnstile.rendered=true")
+                        rendered = True
+                        continue
+                    if state["generation"] != generation:
+                        clicked.clear()
+                        generation = state["generation"]
+                    for target in state.get("targets", []):
+                        if target["id"] not in clicked:
+                            request(context.eval, "ruyijsTurnstile.clicks++")
+                            hold_ms = min(80, max(0, deadline - monotonic()) * 500)
+                            request(context.click, target["path"], hold_ms=hold_ms)
+                            clicked.add(target["id"])
+            finally:
+                # Cleanup has a separate bounded wait, even at the deadline.
+                context.timeout = 1
+    except TimeoutError as error:
+        raise TurnstileError("Turnstile timed out before returning a token",
+                             code="timeout", events=events) from error
 
     code = "timeout"
     message = "Turnstile timed out before returning a token"
@@ -202,17 +227,18 @@ def solve_turnstile_details(site_url: str, sitekey: str, *, action: str | None =
     ``site_url`` must use the hostname registered for ``sitekey``. The path and
     query are preserved so location-sensitive sitekeys behave as on the target
     page. Each attempt uses a fresh Context; no cookie jar or token is reused.
+    ``timeout`` is the budget in seconds for each attempt, including startup;
+    process cleanup has a separate bounded wait. Runtime timeouts use the same
+    ``attempts`` limit as challenge failures; exhausted timeouts are reported
+    as TurnstileError with code "timeout".
     """
     site_url = _validated_url(site_url)
     if not isinstance(sitekey, str) or not _SITEKEY.fullmatch(sitekey):
         raise ValueError("sitekey must contain 16-255 URL-safe characters")
     if action is not None and (not isinstance(action, str) or not _ACTION.fullmatch(action)):
         raise ValueError("action must be 1-32 letters, digits, underscores or hyphens")
-    if cdata is not None:
-        if not isinstance(cdata, str) or not cdata or len(cdata) > 255:
-            raise ValueError("cdata must be a nonempty string of at most 255 characters")
-        if any(character in cdata for character in "\x00\r\n"):
-            raise ValueError("cdata must not contain NUL, CR or LF")
+    if cdata is not None and (not isinstance(cdata, str) or not _CDATA.fullmatch(cdata)):
+        raise ValueError("cdata must be 1-255 letters, digits, underscores or hyphens")
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be a finite positive number")
     if isinstance(attempts, bool) or not isinstance(attempts, int) or attempts < 1:
@@ -264,7 +290,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("sitekey")
     parser.add_argument("--action")
     parser.add_argument("--cdata")
-    parser.add_argument("--timeout", type=float, default=90.0)
+    parser.add_argument("--timeout", type=float, default=90.0,
+                        help="per-attempt budget in seconds, excluding bounded process cleanup")
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--poll-ms", type=int, default=100)
     proxy = parser.add_mutually_exclusive_group()

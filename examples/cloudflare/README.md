@@ -34,6 +34,13 @@ token = solve_turnstile(
 `proxy`、自定义 fingerprint，以及 interactive challenge 的 checkbox 点击。
 Turnstile token 是一次性且会过期，取得后应立即提交给目标站点，不要缓存。
 
+`action` 和 `cdata` 仅允许 ASCII 字母、数字、下划线和连字符，长度分别为
+1–32 和 1–255；不需要时省略或传 `None`。非法参数会在启动 Context 前报错。
+`timeout` 是每次尝试的秒数预算，包含启动和页面处理；进程清理另有有限等待。
+运行时超时也会按 `attempts` 重试，耗尽后抛出 `TurnstileError`，其 `code`
+为 `"timeout"`。挑战刷新后可重新点击 checkbox；已触发过期回调的 token
+不会返回给调用方。
+
 命令行接口：
 
 ```sh
