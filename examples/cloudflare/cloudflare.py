@@ -86,20 +86,13 @@ addEventListener('message', e => {
 
 def configure(context, profile):
     context.configure_clock("system")
-    if profile in ("datadome", "linux"):
+    if profile == "linux":
+        fingerprint = json.loads(Path(__file__).with_name("linux_firefox159_llvmpipe.json").read_text())
+        fingerprint["navigator"]["hardwareConcurrency"] = os.cpu_count() or 1
+        context.configure_fingerprint(fingerprint)
+    elif profile == "datadome":
         example = runpy.run_path(str(EXAMPLES / "DataDome/datadome.py"))
         fingerprint = copy.deepcopy(example["ENVIRONMENT"])
-        if profile == "linux":
-            fingerprint["navigator"] = {
-                "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:159.0) Gecko/20100101 Firefox/159.0",
-                "platform": "Linux x86_64", "oscpu": "Linux x86_64", "appVersion": "5.0 (X11)",
-                "language": "en-US", "languages": ["en-US", "en"],
-                "hardwareConcurrency": os.cpu_count() or 1,
-            }
-            fingerprint["webgl"] = {
-                "vendor": "Mozilla", "renderer": "llvmpipe, or similar",
-                "unmaskedVendor": "Mesa", "unmaskedRenderer": "llvmpipe, or similar",
-            }
         context.configure_fingerprint(fingerprint)
     elif profile == "akamai":
         example = runpy.run_path(str(EXAMPLES / "akamai/akamai.py"))
