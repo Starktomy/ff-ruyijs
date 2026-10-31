@@ -32,6 +32,7 @@ std::string CssBoxSerialize(const std::vector<CssDeclarationValue>& rows,
   if (std::all_of(values.begin(), values.end(), [&](const auto& v) { return v == values[0]; }) &&
       (values[0] == "inherit" || values[0] == "initial" || values[0] == "unset" ||
        values[0] == "revert" || values[0] == "revert-layer")) result = values[0];
+  else if (name == "place-items") result = values[0] == values[1] ? values[0] : values[0] + " " + values[1];
   else if (names.size() == 4) {
     size_t count = 4;
     if (values[3] == values[1]) { count = 3; if (values[2] == values[0]) {

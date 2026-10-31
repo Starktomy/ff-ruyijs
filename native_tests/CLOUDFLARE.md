@@ -168,6 +168,25 @@ Hit testing remains bounded by the layout model: full browser painting order,
 implemented. The current clip check uses an ancestor's projected rectangle.
 The caret-position point methods remain pending.
 
+## Grid columns and item alignment
+
+The live widget's `grid-column:2` was clamped to the only existing column,
+placing its label on a second row. A minimal Firefox comparison confirmed the
+layout failure. Numeric grid placements now extend implicit columns using
+`grid-auto-columns`; grid intrinsic width includes the column contributions,
+and numeric `grid-area` participates in placement. Explicit overlapping items
+can share a cell. `place-items` expands to its two longhands with priority and
+serialization support, and grid items honor inline alignment.
+
+Three local cases cover the widget-shaped grid inside flex, explicit overlap,
+implicit track sizing, layout alignment and CSSOM shorthand changes. The full
+suite passes 62 cases and smoke checks pass. The live label/input height is now
+24 px rather than 40.8 px, matching the minimal Firefox reference. Its width is
+164.267 px rather than 140.267 px, with the label text beside the 24 px box.
+The original-page attempt still returns `600010` (18.629 s), with no token or
+backend verification. Named grid areas/lines and complete grid track sizing
+remain outside this numeric-placement change.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip

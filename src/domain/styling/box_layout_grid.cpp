@@ -3,8 +3,8 @@
 // count, auto-fill or auto-fit), implicit rows from grid-auto-rows, row-major
 // auto-placement with line numbers and spans, the track sizing algorithm
 // (§12: base sizes, growth limits, maximize, flexible tracks, stretch auto),
-// gaps, and align-self/align-items in the row. Implicit columns and named
-// lines/areas are not resolved: such an item takes the next auto position.
+// gaps and item alignment. Numeric placements can extend implicit columns;
+// named lines/areas still use the next auto position.
 #include "domain/styling/box_layout_internal.h"
 #include "domain/styling/css_numeric_value.h"
 #include "domain/styling/css_components.h"
@@ -88,6 +88,10 @@ std::vector<Track> Tracks(const BoxStyle& style, const std::string& text, double
 void Line(const BoxStyle& style, const char* axis, size_t* start, size_t* span) {
   auto start_text = style.Get((std::string("grid-") + axis + "-start").c_str());
   auto end_text = style.Get((std::string("grid-") + axis + "-end").c_str());
+  const auto area = CssSplit(style.Get("grid-area"), '/');
+  const size_t offset = std::string_view(axis) == "column" ? 1 : 0;
+  if ((start_text.empty() || start_text == "auto") && offset < area.size()) start_text = area[offset];
+  if ((end_text.empty() || end_text == "auto") && offset + 2 < area.size()) end_text = area[offset + 2];
   const auto shorthand = style.Get((std::string("grid-") + axis).c_str());
   if (!shorthand.empty() && (start_text.empty() || start_text == "auto")) {
     const auto slash = shorthand.find('/');
@@ -100,6 +104,22 @@ void Line(const BoxStyle& style, const char* axis, size_t* start, size_t* span) 
   else if (const long n = std::strtol(start_text.c_str(), nullptr, 10); n > 0) *start = size_t(n);
   if (const long s = parse_span(end_text)) *span = size_t(s);
   else if (const long n = std::strtol(end_text.c_str(), nullptr, 10); n > 0 && *start && size_t(n) > *start) *span = size_t(n) - *start;
+  *start = std::min(*start, kMaxTracks);
+  *span = std::min(*span, kMaxTracks - (*start ? *start - 1 : 0));
+}
+void ImplicitColumns(const std::vector<BoxNode>& nodes, size_t index, std::vector<Track>* columns) {
+  size_t count = std::max(size_t(1), columns->size());
+  for (size_t child : nodes[index].children) {
+    if (nodes[child].text || BoxAbsolute(nodes[child]) || nodes[child].style.Get("display") == "none") continue;
+    size_t start = 0, span = 1;
+    Line(nodes[child].style, "column", &start, &span);
+    count = std::max(count, (start ? start - 1 : 0) + span);
+  }
+  const auto text = nodes[index].style.Get("grid-auto-columns");
+  auto implicit = Tracks(nodes[index].style, text.empty() ? "auto" : text, BoxAuto(), 0);
+  if (implicit.empty()) { Track track; track.min_auto = track.max_auto = true; implicit.push_back(track); }
+  size_t at = 0;
+  while (columns->size() < count) columns->push_back(implicit[at++ % implicit.size()]);
 }
 // §12.4-12.7 for one axis: base sizes from fixed minimums or item minimum
 // contributions, growth limits, then free space to non-flexible and fr tracks.
@@ -145,6 +165,33 @@ double Sum(const std::vector<Track>& t, size_t from, size_t count, double gap) {
 }
 }  // namespace
 
+double BoxFlow::GridIntrinsicContent(size_t index, bool minimum, unsigned depth) {
+  const auto& style = nodes[index].style;
+  const double gap = BoxLength(style, "column-gap", BoxAuto(), 0);
+  auto columns = Tracks(style, style.Get("grid-template-columns"), BoxAuto(), gap);
+  ImplicitColumns(nodes, index, &columns);
+  std::vector<double> contributions(columns.size());
+  for (size_t i = 0; i < columns.size(); ++i)
+    contributions[i] = columns[i].min_auto ? 0 : columns[i].min;
+  size_t cursor = 0;
+  for (size_t child : nodes[index].children) {
+    const auto& item = nodes[child];
+    if (BoxAbsolute(item) || item.style.Get("display") == "none" || (item.text && item.text_width <= 0)) continue;
+    size_t start = 0, span = 1;
+    if (!item.text) Line(item.style, "column", &start, &span);
+    const size_t column = start ? start - 1 : cursor % columns.size();
+    span = std::min(span, columns.size() - column);
+    const double contribution = IntrinsicOuter(child, minimum, depth + 1);
+    for (size_t i = column; i < column + span; ++i)
+      if (columns[i].min_auto || (!minimum && columns[i].max_auto))
+        contributions[i] = std::max(contributions[i], contribution / double(span));
+    cursor = column + span;
+  }
+  double result = gap * (columns.size() - 1);
+  for (double value : contributions) result += value;
+  return result;
+}
+
 bool BoxFlow::GridChildren(size_t index, size_t positioned, unsigned depth, double* height, double* width) {
   const auto& style = nodes[index].style;
   const BoxRect content = boxes[index].content;
@@ -157,7 +204,7 @@ bool BoxFlow::GridChildren(size_t index, size_t positioned, unsigned depth, doub
   const double column_gap = gap("column-gap", content[2]);
   const double row_gap = gap("row-gap", definite ? content[3] : BoxAuto());
   auto columns = Tracks(style, style.Get("grid-template-columns"), content[2], column_gap);
-  if (columns.empty()) { Track t; t.min_auto = t.max_auto = true; columns.push_back(t); }
+  ImplicitColumns(nodes, index, &columns);
   auto rows = Tracks(style, style.Get("grid-template-rows"), definite ? content[3] : BoxAuto(), row_gap);
   const auto auto_rows = Tracks(style, style.Get("grid-auto-rows").empty() ? "auto" : style.Get("grid-auto-rows"), BoxAuto(), 0);
   struct Item { size_t node, column = 0, row = 0, column_span = 1, row_span = 1; long order = 0; };
@@ -190,7 +237,7 @@ bool BoxFlow::GridChildren(size_t index, size_t positioned, unsigned depth, doub
   size_t cursor_row = 0, cursor_column = 0;
   for (auto& item : items) {
     size_t r = item.row ? item.row - 1 : cursor_row, c = item.column ? std::min(item.column - 1, columns.size() - item.column_span) : (item.row ? 0 : cursor_column);
-    while (!free_at(r, c, item)) {
+    while (!(item.row && item.column) && !free_at(r, c, item)) {
       if (item.column) { ++r; continue; }
       if (++c + item.column_span > columns.size()) { c = 0; ++r; }
       if (r > 100000) break;
@@ -225,8 +272,11 @@ bool BoxFlow::GridChildren(size_t index, size_t positioned, unsigned depth, doub
       const auto& cs = nodes[item.node].style;
       double specified = BoxLength(cs, "width", area, BoxAuto());
       if (std::isfinite(specified) && cs.Get("box-sizing") == "border-box") specified -= extra;
+      auto justify = cs.Get("justify-self");
+      if (justify.empty() || justify == "auto") justify = style.Get("justify-items");
       forced_width[item.node] = std::isfinite(specified) ? specified
-          : std::max(0.0, area - box.margin[1] - box.margin[3] - extra);
+          : normal(justify) ? std::max(0.0, area - box.margin[1] - box.margin[3] - extra)
+          : std::min(Intrinsic(item.node, false, depth + 1), std::max(0.0, area - box.margin[1] - box.margin[3] - extra));
       forced_height[item.node] = BoxAuto();
     }
     const BoxRect cell{content[0], content[1], area, BoxAuto()};
@@ -269,7 +319,12 @@ bool BoxFlow::GridChildren(size_t index, size_t positioned, unsigned depth, doub
       }
     } else if (align == "center") offset = (area_height - outer[n]) / 2;
     else if (align == "end" || align == "flex-end" || align == "self-end") offset = area_height - outer[n];
-    const double x = content[0] + column_at[item.column] + box.margin[3];
+    auto justify = nodes[item.node].text ? std::string("start") : nodes[item.node].style.Get("justify-self");
+    if (justify.empty() || justify == "auto") justify = style.Get("justify-items");
+    const double free = Sum(columns, item.column, item.column_span, column_gap) - box.border[2] - box.margin[1] - box.margin[3];
+    const double inlineOffset = justify == "center" ? free / 2 :
+        (justify == "end" || justify == "self-end" || justify == "flex-end") ? free : 0;
+    const double x = content[0] + column_at[item.column] + box.margin[3] + inlineOffset;
     const double y = content[1] + row_at[item.row] + box.margin[0] + std::max(0.0, offset);
     ShiftBoxes(item.node, BoxRound(x) - box.border[0], BoxRound(y) - box.border[1]);
   }

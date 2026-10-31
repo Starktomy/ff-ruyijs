@@ -45,6 +45,7 @@ std::string BoxLength(std::string value) {
 }
 bool CssBoxShorthand(std::string_view name) {
   if (CssFlexShorthand(name) || CssOverflowShorthand(name)) return true;
+  if (name == "place-items") return true;
   if (name == "margin" || name == "padding" || name == "inset" || name == "border" ||
       name == "border-width" || name == "border-style" || name == "border-color") return true;
   return name == "border-top" || name == "border-right" ||
@@ -54,6 +55,7 @@ std::vector<std::string> CssBoxLonghands(std::string_view name) {
   std::vector<std::string> result;
   if (CssFlexShorthand(name)) return CssFlexLonghands(name);
   if (CssOverflowShorthand(name)) return {"overflow-x", "overflow-y"};
+  if (name == "place-items") return {"align-items", "justify-items"};
   if (!CssBoxShorthand(name)) return result;
   for (auto side : BoxSides) {
     const auto prefix = std::string("border-")+side;
@@ -92,6 +94,28 @@ bool CssBoxExpand(const std::string& name, const std::string& input, bool import
   const auto tokens = BoxTokens(value);
   if (tokens.empty() || tokens.size() > 4) return false;
   for (const auto& token : tokens) if (BoxWide(token)) return false;
+  if (name == "place-items") {
+    size_t at = 0;
+    const auto alignment = [&](bool justify, std::string* result) {
+      if (at == tokens.size()) return false;
+      std::string prefix;
+      if (BoxWord(tokens[at], "safe,unsafe,first,last") || (justify && tokens[at] == "legacy"))
+        prefix = tokens[at++] + " ";
+      if (at == tokens.size()) return false;
+      const auto& keyword = tokens[at++];
+      if (!BoxWord(keyword, "normal,stretch,center,start,end,self-start,self-end,flex-start,flex-end,baseline") &&
+          !(justify && BoxWord(keyword, "left,right"))) return false;
+      if ((prefix == "first " || prefix == "last ") && keyword != "baseline") return false;
+      *result = prefix + keyword; return true;
+    };
+    std::string align, justify;
+    if (!alignment(false, &align)) return false;
+    if (at == tokens.size()) justify = align;
+    else if (!alignment(true, &justify) || at != tokens.size()) return false;
+    out->push_back({"align-items", align, important});
+    out->push_back({"justify-items", justify, important});
+    return true;
+  }
   std::vector<CssDeclarationValue> result;
   if (names.size() == 4) {
     for (const auto& token : tokens) {
