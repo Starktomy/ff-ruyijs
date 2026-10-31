@@ -70,6 +70,29 @@ class RuntimeTests(unittest.TestCase):
                              ["Win32", "zh-CN", "SCRIPT", "done"])
             self.assertTrue(ctx.eval("(()=>{let f=document.createElement('iframe');document.body.appendChild(f);return f.contentWindow!==window && f.contentDocument.defaultView===f.contentWindow})()"))
 
+    def test_async_script_microtask_keeps_current_script(self):
+        with self.context() as ctx:
+            ctx.put_resource('https://example.test/async.js',
+                'globalThis.during=document.currentScript.src;'
+                'Promise.resolve().then(()=>globalThis.after=document.currentScript.src)')
+            ctx.load_page('https://example.test/',
+                '<!doctype html><script src="/async.js" async></script>')
+            ctx.advance(5)
+            self.assertEqual(ctx.eval('[during,after]'),
+                             ['https://example.test/async.js'] * 2)
+
+    def test_dynamic_script_microtask_keeps_current_script(self):
+        with self.context() as ctx:
+            ctx.put_resource('https://example.test/dynamic.js',
+                'globalThis.dynamicDuring=document.currentScript.src;'
+                'Promise.resolve().then(()=>globalThis.dynamicAfter=document.currentScript.src)')
+            ctx.load_page('https://example.test/', '<!doctype html><html><head></head><body></body></html>')
+            ctx.eval("""let script=document.createElement('script');script.src='/dynamic.js';
+                      document.head.appendChild(script)""")
+            ctx.advance(10)
+            self.assertEqual(ctx.eval('[dynamicDuring,dynamicAfter]'),
+                             ['https://example.test/dynamic.js'] * 2)
+
     def test_canvas_pixels_font_metrics_and_svg(self):
         with self.context() as ctx:
             ctx.load_page("https://example.test/", "<html><body></body></html>")
