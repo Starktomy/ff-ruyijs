@@ -42,6 +42,7 @@ bool Set(JSContext* cx, unsigned argc, JS::Value* vp) {
     if (text.empty()) return state.Throw("NotFoundError", "Empty medium");
     value.append(text);
   } else if (!value.remove(text)) return state.Throw("NotFoundError", "Medium not in list");
+  InvalidateRules(sheet);
   args.rval().setUndefined(); return true;
 }
 }

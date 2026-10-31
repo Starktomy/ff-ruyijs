@@ -39,6 +39,14 @@ bool RuleReceiver(JSContext* cx,JS::HandleValue value,JS::MutableHandleObject ou
     return WebKit::Fail(cx,"CSSRule member called on an incompatible receiver");
   return true;
 }
+void InvalidateRules(JS::HandleObject container) {
+  if (!IsRuleObject(container)) { SheetDataOf(container).InvalidateRules(); return; }
+  const auto& parent = RuleSlotValue(container, RuleParent);
+  if (parent.isObject()) {
+    JS::RootedObject sheet(RuleOwnerOf(container).cx, &parent.toObject());
+    SheetDataOf(sheet).InvalidateRules();
+  }
+}
 State& ContainerOwnerOf(JS::HandleObject container) {
   return IsRuleObject(container)?RuleOwnerOf(container):SheetOwnerOf(container);
 }
