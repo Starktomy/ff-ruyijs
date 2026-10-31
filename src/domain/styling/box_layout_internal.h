@@ -33,6 +33,7 @@ struct BoxFlow {
   double Intrinsic(size_t, bool minimum, unsigned depth);
   double IntrinsicOuter(size_t, bool minimum, unsigned depth);
   double IntrinsicContent(size_t, bool minimum, unsigned depth);  // Ignoring its own width.
+  double GridIntrinsicContent(size_t, bool minimum, unsigned depth);
   void ShiftBoxes(size_t, double dx, double dy);
   // Per node for one ComputeBoxLayout call: a flex item's resolved content-box
   // width/height (NaN: from its style), and memoized intrinsic widths.
