@@ -330,7 +330,13 @@ def wire_headers(headers, http2, method="GET"):
         elif name not in ordered:
             ordered[name] = value
     if http2:
-        ordered["TE"] = "trailers"
+        # Firefox advertises trailers on HTTP/2; Chrome does not.
+        agent = ""
+        for key, value in headers.items():
+            if key.lower() == "user-agent":
+                agent = str(value)
+        if "Chrome/" not in agent:
+            ordered["TE"] = "trailers"
     return ordered
 
 

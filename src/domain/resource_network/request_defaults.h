@@ -84,8 +84,37 @@ inline std::string DefaultReferrer(const RequestDefaults& d) {
     policy="strict-origin-when-cross-origin";
   return RequestReferrer(d.referrer,d.target,policy);
 }
+// A Chrome-shaped client sends its low-entropy client hints with every
+// request; the engine models the hints of the browser its user agent names,
+// so a Chrome user agent carries Chrome's brand list and platform.
+inline bool ChromeUserAgent(const std::string& ua) {
+  return ua.find("Chrome/")!=std::string::npos;
+}
+inline std::string ChromeMajorVersion(const std::string& ua) {
+  size_t at=ua.find("Chrome/");
+  if(at==std::string::npos)return "";
+  at+=7;size_t end=at;
+  while(end<ua.size()&&ua[end]>='0'&&ua[end]<='9')++end;
+  return ua.substr(at,end-at);
+}
+inline std::string ChromePlatform(const std::string& ua) {
+  if(ua.find("Windows")!=std::string::npos)return "Windows";
+  if(ua.find("Macintosh")!=std::string::npos)return "macOS";
+  if(ua.find("Android")!=std::string::npos)return "Android";
+  if(ua.find("Linux")!=std::string::npos||ua.find("X11")!=std::string::npos)return "Linux";
+  return "Windows";
+}
 inline void AddRequestDefaults(const RequestDefaults& d,RequestHeaders& headers) {
   DefaultHeader(headers,"User-Agent",d.userAgent);
+  if(ChromeUserAgent(d.userAgent)) {
+    const std::string version=ChromeMajorVersion(d.userAgent);
+    if(!version.empty()) {
+      DefaultHeader(headers,"Sec-CH-UA","\"Google Chrome\";v=\""+version+"\", \"Chromium\";v=\""+version+
+                       "\", \"Not(A:Brand\";v=\"24\"");
+      DefaultHeader(headers,"Sec-CH-UA-Mobile","?0");
+      DefaultHeader(headers,"Sec-CH-UA-Platform","\""+ChromePlatform(d.userAgent)+"\"");
+    }
+  }
   std::string language;
   for(size_t i=0;i<d.languages.size()&&i<10;++i) {
     if(d.languages[i].empty()||!valid_header_value(d.languages[i]))continue;
