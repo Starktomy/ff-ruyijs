@@ -39,4 +39,4 @@ package-dir = {"" = "python"}
 include-package-data = false
 
 [tool.setuptools.package-data]
-ruyijs = ["turnstile_linux_profile.json"]
+ruyijs = ["turnstile_linux_profile.json", "firefox_windows_profile.json"]

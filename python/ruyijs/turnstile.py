@@ -297,7 +297,10 @@ def main(argv: list[str] | None = None) -> int:
     proxy = parser.add_mutually_exclusive_group()
     proxy.add_argument("--proxy", help="HTTP(S) proxy URL")
     proxy.add_argument("--direct", action="store_true", help="ignore proxy environment variables")
-    parser.add_argument("--profile", choices=("linux", "default"), default="linux")
+    profiles = parser.add_mutually_exclusive_group()
+    profiles.add_argument("--profile", choices=("linux", "default"), default="linux")
+    profiles.add_argument("--profile-file", type=Path,
+                          help="fingerprint JSON object, e.g. from ruyijs.profile_generator")
     parser.add_argument("--json", action="store_true",
                         help="print token, timing and attempts as JSON")
     args = parser.parse_args(argv)
@@ -306,11 +309,16 @@ def main(argv: list[str] | None = None) -> int:
         os.environ[name] for name in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy")
         if os.environ.get(name)), None))
     try:
+        profile = args.profile
+        if args.profile_file is not None:
+            profile = json.loads(args.profile_file.read_text(encoding="utf-8"))
+            if not isinstance(profile, dict):
+                raise ValueError("profile file must contain a JSON object")
         solution = solve_turnstile_details(
             args.site_url, args.sitekey, action=args.action, cdata=args.cdata,
             timeout=args.timeout, attempts=args.attempts, poll_ms=args.poll_ms,
-            proxy=selected_proxy, profile=args.profile)
-    except (ValueError, TypeError, TurnstileError) as error:
+            proxy=selected_proxy, profile=profile)
+    except (ValueError, TypeError, OSError, TurnstileError) as error:
         print(str(error), file=sys.stderr)
         return 1
     if args.json:

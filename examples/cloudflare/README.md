@@ -53,6 +53,20 @@ PYTHONPATH=python python3 -m ruyijs.turnstile \
 默认输出只有 token，便于接入 shell 流程；`--json` 额外输出耗时和尝试次数。
 默认使用实测 Linux Firefox 159 指纹；`--profile default` 可改用引擎默认指纹。
 
+可生成不同 Linux／Windows 桌面配置并直接传入求解器：
+
+```python
+from ruyijs import generate_profile, solve_turnstile
+
+profile = generate_profile("windows", seed=42, locale="zh-CN")
+token = solve_turnstile(site_url, sitekey, profile=profile)
+```
+
+也可用 `python -m ruyijs.profile_generator --os linux --seed 42 --output linux.json`
+导出，再通过求解器的 `--profile-file linux.json` 加载。
+批量生成、字段说明及跨平台渲染边界见
+[profile 生成器文档](../../docs/profile-generator.zh-CN.md)。
+
 以下为变基前各阶段的历史验证记录。
 
 2026-10-31，`dev/linux-next` 的原生 Linux 运行时使用 `--profile linux`
