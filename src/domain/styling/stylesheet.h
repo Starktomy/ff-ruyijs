@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -439,6 +440,9 @@ struct RuleIndex {
 struct RuleIndexStore {
     std::map<std::string, std::vector<ParsedSelector>> selectors;
     std::map<const StyleSheetAggregate*, RuleIndex> indexes;
+    // Physical declarations depend only on the immutable cascade rule, not
+    // the matched element. Populate on first match; unused rules cost nothing.
+    std::map<const CssRule*, std::vector<CssProperty>> declarations;
 };
 struct StyleResolutionContext {
     std::map<std::pair<uint64_t,uint64_t>, StyleDeclaration> computed;
@@ -446,6 +450,20 @@ struct StyleResolutionContext {
     // Built once per sheet for the store's lifetime, during which the sheets
     // do not change. A context owns a store unless one is shared with it.
     std::shared_ptr<RuleIndexStore> store = std::make_shared<RuleIndexStore>();
+    const std::vector<CssProperty>& Properties(const CssRule& rule) {
+        auto [entry, inserted] = store->declarations.try_emplace(&rule);
+        if (inserted) {
+            std::vector<std::pair<std::string, std::string>> physical;
+            for (const auto& authored : rule.properties()) {
+                physical.clear();
+                if (!CssPhysicalDeclarations(authored.name, authored.value, &physical))
+                    physical.emplace_back(authored.name, authored.value);
+                for (auto& [name, value] : physical)
+                    entry->second.push_back({std::move(name), std::move(value), authored.important});
+            }
+        }
+        return entry->second;
+    }
     const RuleIndex& Index(const StyleSheetAggregate& sheet) {
         auto& indexes = store->indexes;
         auto& selectors = store->selectors;
@@ -496,8 +514,8 @@ public:
         const std::vector<const StyleSheetAggregate*>& sheets, const ElementNode& element,
         StyleResolutionContext* shared = nullptr)
     {
-        StyleResolutionContext local;
-        if (!shared) shared = &local;
+        std::optional<StyleResolutionContext> local;
+        if (!shared) shared = &local.emplace();
         const auto identity = std::make_pair(element.document, element.key);
         if (element.key) {
             const auto previous = shared->computed.find(identity);
@@ -585,12 +603,7 @@ public:
                 {
                     const ParsedSelector& selector = (*index.parsed[entry.first])[entry.second];
                     if (!selector.matches(element)) continue;
-                    for (const auto& authored : rule.properties()) {
-                      physical.clear();
-                      if (!CssPhysicalDeclarations(authored.name, authored.value, &physical))
-                        physical.push_back({authored.name, authored.value});
-                      for (const auto& [physical_name, physical_value] : physical) {
-                        CssProperty prop{physical_name, physical_value, authored.important};
+                    for (const auto& prop : shared->Properties(rule)) {
                         Candidate candidate;
                         candidate.value = prop.value;
                         candidate.important = prop.important;
@@ -601,7 +614,6 @@ public:
                                                                             : CssRule::kUnlayered;
                         candidate.order = order++;
                         Consider(&winners, prop.name, candidate);
-                      }
                     }
                 }
             }
