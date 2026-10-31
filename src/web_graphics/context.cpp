@@ -77,7 +77,9 @@ bool ContextPort(void* context, JS::HandleObject canvas, JS::HandleString kind,
     out.setNull();
     return true;
   }
-  Context* entry = s.FindOrCreate(canvas, webgl2 ? 2 : 1);
+  Context* entry = s.Find(canvas, webgl2 ? 2 : 1);
+  if (!entry && s.disabled) { out.setNull(); return true; }
+  if (!entry) entry = s.FindOrCreate(canvas, webgl2 ? 2 : 1);
   if (!entry->wrapper) {
     JS::RootedObject wrapper(s.cx);
     if (!NewContext(s, *entry, &wrapper)) return false;

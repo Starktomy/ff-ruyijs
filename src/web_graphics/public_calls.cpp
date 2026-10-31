@@ -1,6 +1,7 @@
 // The public wheel's no-backend calls. No shader compilation or raster output.
 #include "web_graphics/internal.h"
 #include "web_graphics/public_calls.h"
+#include "js/experimental/TypedData.h"
 
 namespace ruyijs::web_graphics {
 bool PublicCall(JSContext* cx, unsigned argc, JS::Value* vp) {
@@ -10,6 +11,45 @@ bool PublicCall(JSContext* cx, unsigned argc, JS::Value* vp) {
   JS::RootedObject self(cx);
   if (!detail::ContextReceiver(cx, args, &self)) return false;
   switch (op) {
+    case kInternalformatParameter: {
+      if (!detail::ContextReceiver(cx,args,&self)) return false;
+      Context* context=detail::ContextOf(self);
+      int32_t target=0,format=0,pname=0;
+      if (!detail::ToEnum(cx,args.get(0),&target) ||
+          !detail::ToEnum(cx,args.get(1),&format) ||
+          !detail::ToEnum(cx,args.get(2),&pname)) return false;
+      args.rval().setNull();
+      if (target != 0x8D41 || pname != 0x80A9) {
+        detail::SetError(*context,kInvalidEnum);
+        return true;
+      }
+      if (format == 0x1907) format=0x8051;
+      else if (format == 0x1908) format=0x8058;
+      // ANGLE D3D11 renderbuffer formats. The capability model's MAX_SAMPLES
+      // is 8; D3D11's supported multisample levels for these formats are 8 and
+      // 4. Keep the explicit set narrow so unsized or non-renderable formats
+      // still produce INVALID_ENUM like the driver.
+      static constexpr int32_t kFormats[] = {
+        0x8229,0x8F94,0x8232,0x8231,0x8234,0x8233,0x8236,0x8235,
+        0x822B,0x8F95,0x8238,0x8237,0x823A,0x8239,0x823C,0x823B,
+        0x8051,0x8F96,0x8C41,0x8D7D,0x8D8F,0x8D77,0x8D89,0x8D71,
+        0x8D83,0x8058,0x8F97,0x8C43,0x8059,0x8D7C,0x8D8E,0x906F,
+        0x8D76,0x8D88,0x8D70,0x8D82,0x881A,0x8814,0x8C3A,0x8C3D,
+        0x822D,0x822E,0x822F,0x8230,0x81A5,0x81A6,0x8CAC,0x8D48,
+        0x88F0,0x8CAD,0x8056,0x8057,0x8D62
+      };
+      bool supported=false;
+      for(int32_t candidate:kFormats) supported=supported||candidate==format;
+      if (!supported) {
+        detail::SetError(*context,kInvalidEnum);
+        return true;
+      }
+      JS::RootedObject result(cx,JS_NewInt32Array(cx,2));
+      if (!result || !JS_SetElement(cx,result,uint32_t(0),int32_t(8)) ||
+          !JS_SetElement(cx,result,uint32_t(1),int32_t(4))) return false;
+      args.rval().setObject(*result);
+      return true;
+    }
     case kNull: args.rval().setNull(); return true;
     case kZero: args.rval().setInt32(0); return true;
     case kMinusOne: args.rval().setInt32(-1); return true;

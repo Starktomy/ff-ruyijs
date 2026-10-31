@@ -15,6 +15,7 @@ bool ReadAttributes(JSContext*, Context&, const std::vector<GlslDeclaration>& at
                     int32_t first, int32_t vertex, std::vector<GlslValue>* out);
 // The float32 varying at one point of the triangle, from its three corners.
 void Interpolate(const double w[3], const std::vector<GlslValue>& corners, size_t count,
-                 const std::vector<GlslDeclaration>& names, std::vector<GlslValue>* out);
+                 const std::vector<GlslDeclaration>& names, std::vector<GlslValue>* out,
+                 size_t first = 0);
 }  // namespace ruyijs::web_graphics::draw_detail
 #endif

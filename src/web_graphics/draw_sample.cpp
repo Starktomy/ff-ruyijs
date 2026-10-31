@@ -74,16 +74,22 @@ bool InsideEdge(double weight, const double a[2], const double b[2], double sign
   return dy > 0.0 || (dy == 0.0 && dx < 0.0);
 }
 
-int32_t Coverage(const double* a, const double* b, const double* c, int32_t x, int32_t y,
-                 double sign) {
-  int32_t covered = 0;
-  for (const auto& sample : kSamples) {
+unsigned CoverageMask(const double* a, const double* b, const double* c, int32_t x, int32_t y,
+                      double sign) {
+  unsigned covered = 0;
+  for (unsigned i=0;i<4;++i) {
+    const auto& sample=kSamples[i];
     const double sx = x + 0.5 + sample[0] / 16.0, sy = y + 0.5 + sample[1] / 16.0;
     if (!InsideEdge(Edge(a, b, sx, sy), a, b, sign) ||
         !InsideEdge(Edge(b, c, sx, sy), b, c, sign) ||
         !InsideEdge(Edge(c, a, sx, sy), c, a, sign)) continue;
-    ++covered;
+    covered |= 1u<<i;
   }
   return covered;
+}
+int32_t Coverage(const double* a, const double* b, const double* c, int32_t x, int32_t y,
+                 double sign) {
+  const unsigned mask=CoverageMask(a,b,c,x,y,sign);
+  return int32_t((mask&1)+((mask>>1)&1)+((mask>>2)&1)+((mask>>3)&1));
 }
 }  // namespace ruyijs::web_graphics::draw_detail

@@ -98,6 +98,93 @@ std::string Join(JSContext* cx, const JS::CallArgs& args, unsigned first) {
   return joined;
 }
 
+bool Format(JSContext* cx, const JS::CallArgs& args, unsigned first, std::string* out) {
+  if (args.length() <= first + 1 || !args[first].isString()) {
+    *out = Join(cx, args, first);
+    return true;
+  }
+  JS::RootedString text(cx, args[first].toString());
+  const std::string format = Utf8(cx, text, Log::kTextLimit);
+  if (format.empty()) {
+    *out = Join(cx, args, first);
+    return true;
+  }
+  unsigned index = first + 1;
+  std::string output;
+  auto flush = [&]() {
+    if (output.empty()) return;
+    if (!out->empty()) *out += ' ';
+    *out += output;
+    output.clear();
+  };
+  for (size_t pos = 0; pos < format.size() && out->size() + output.size() < Log::kTextLimit;) {
+    if (format[pos] != '%') { output += format[pos++]; continue; }
+    const size_t begin = pos++;
+    if (pos == format.size()) { output += '%'; break; }
+    if (format[pos] == '%') { output += '%'; ++pos; continue; }
+    // Gecko accepts %<width>.<precision> for numeric substitutions. Bound
+    // both fields to the log budget before passing them to printf.
+    int width = -1, precision = -1;
+    auto digits = [&](int* field) {
+      *field = 0;
+      while (pos < format.size() && format[pos] >= '0' && format[pos] <= '9') {
+        *field = std::min<int>(Log::kTextLimit, *field * 10 + format[pos++] - '0');
+      }
+    };
+    if (format[pos] >= '0' && format[pos] <= '9') digits(&width);
+    if (pos < format.size() && format[pos] == '.') {
+      ++pos;
+      if (pos < format.size() && format[pos] >= '0' && format[pos] <= '9') digits(&precision);
+      else { output += format.substr(begin, pos - begin); continue; }
+    }
+    if (pos == format.size()) { output += format.substr(begin); break; }
+    const char kind = format[pos++];
+    if (kind != 'c' && kind != 's' && kind != 'd' && kind != 'i' && kind != 'f' &&
+        kind != 'o' && kind != 'O') {
+      output += format.substr(begin, pos - begin);
+      continue;
+    }
+    if (kind == 'o' || kind == 'O') {
+      output += index < args.length() ? Render(cx, args[index++]) : "undefined";
+      continue;
+    }
+    if (index >= args.length()) continue;
+    JS::RootedValue value(cx, args[index++]);
+    if (kind == 's' || kind == 'c' || ((kind == 'd' || kind == 'i') && value.isBigInt())) {
+      JS::RootedString converted(cx, JS::ToString(cx, value));
+      if (!converted) return false;
+      if (kind != 'c') output += Utf8(cx, converted, Log::kTextLimit);
+      continue;
+    }
+    std::string spec = "%";
+    if (width >= 0) spec += std::to_string(width);
+    if (precision >= 0) spec += "." + std::to_string(kind == 'f' ? std::min(precision, 15) : precision);
+    spec += kind == 'f' ? 'f' : 'd';
+    std::vector<char> buffer(Log::kTextLimit + 1);
+    if (kind == 'f') {
+      double number;
+      if (!JS::ToNumber(cx, value, &number)) return false;
+      if (std::isnan(number)) output += "NaN";
+      else {
+        std::snprintf(buffer.data(), buffer.size(), spec.c_str(), number);
+        output += buffer.data();
+      }
+    } else {
+      int32_t number;
+      if (!JS::ToInt32(cx, value, &number)) return false;
+      std::snprintf(buffer.data(), buffer.size(), spec.c_str(), number);
+      output += buffer.data();
+    }
+  }
+  flush();
+  for (; index < args.length() && out->size() < Log::kTextLimit; ++index) {
+    if (!out->empty()) *out += ' ';
+    *out += Render(cx, args[index]);
+  }
+  if (out->size() > Log::kTextLimit) out->resize(Log::kTextLimit);
+  return true;
+}
+
 std::string Label(JSContext* cx, const JS::CallArgs& args, const char* fallback) {
   return args.length() ? LabelText(cx, args[0]) : std::string(fallback);
 }

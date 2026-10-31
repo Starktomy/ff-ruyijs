@@ -120,7 +120,7 @@
 {2, "invalidateFramebuffer", PublicCall, 2, kVoid},
 {2, "invalidateSubFramebuffer", PublicCall, 6, kVoid},
 {2, "readBuffer", PublicCall, 1, kVoid},
-{2, "getInternalformatParameter", PublicCall, 3, kNull},
+{2, "getInternalformatParameter", PublicCall, 3, kInternalformatParameter},
 {2, "renderbufferStorageMultisample", PublicCall, 5, kVoid},
 {2, "texStorage2D", PublicCall, 5, kVoid},
 {2, "texStorage3D", PublicCall, 6, kVoid},

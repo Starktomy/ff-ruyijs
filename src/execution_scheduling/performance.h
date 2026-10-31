@@ -12,6 +12,8 @@ enum PerfSlot { PClock, PTimeline, PEntries, PPrototypes, PException, PTiming, P
                 // NavigationTiming). One per Performance owner, so a retired
                 // document never reads the next document's values.
                 PNavTiming,
+                // Initial about:blank documents start when their realm is created.
+                PInitialOffset,
                 // RelativeTimeline::GetRandomTimelineSeed of this document, as two int32 halves.
                 PSeedLow, PSeedHigh, PerfSlots };
 enum EntrySlot { EKind, EName, EStart, EDuration, EDetail, EntrySlots };

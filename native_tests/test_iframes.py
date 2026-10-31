@@ -150,6 +150,22 @@ class IframeLifecycleTests(unittest.TestCase):
                           "view": True, "element": True, "parent": True, "top": True,
                           "topConfigurable": False})
 
+    def test_initial_blank_frame_has_its_own_stable_time_origin(self):
+        context = self.context()
+        origin = context.eval("performance.timeOrigin")
+        context.advance(500)
+        context.eval("""window.frame = document.createElement('iframe');
+            document.body.appendChild(frame); window.firstWindow = frame.contentWindow;
+            void 0;""")
+        probe = """[performance.timeOrigin, performance.now(), new Event('x').timeStamp,
+                    performance.getEntriesByType('navigation').length]"""
+        self.assertEqual(context.eval_in_frame(probe, "0"), [origin + 500, 0, 0, 0])
+        context.advance(200)
+        self.assertEqual(context.eval_in_frame(probe, "0"), [origin + 500, 200, 200, 0])
+        context.eval("frame.remove(); document.body.appendChild(frame); void 0;")
+        self.assertEqual(context.eval_in_frame(probe, "0"), [origin + 700, 0, 0, 0])
+        self.assertEqual(context.eval("firstWindow.performance.timeOrigin"), origin + 500)
+
 
 if __name__ == "__main__":
     unittest.main()

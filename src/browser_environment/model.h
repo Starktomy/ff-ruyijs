@@ -111,7 +111,9 @@ inline constexpr Field kWebGLFields[] = {
   // entry per name, in the order the page sees them.
   {"extensions", ValueType::Strings}, {"extensions2", ValueType::Strings},
   // Per-pname getParameter overrides, keyed by the decimal pname ("3379").
-  {"limits", ValueType::Map, false, false, nullptr, ValueType::Number}};
+  {"limits", ValueType::Map, false, false, nullptr, ValueType::Number},
+  // Firefox webgl.disabled: prevent creating new graphics contexts.
+  {"disabled", ValueType::Boolean}};
 // The "webgpu" group only carries the stub-adapter opt-in. The adapter and
 // device feature sets, and every limit, stay read-only data from the imported
 // WebGpuCapabilitiesAggregate; the baseline has no such group.

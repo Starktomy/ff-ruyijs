@@ -4,6 +4,8 @@
 #include "web_graphics/glsl.h"
 
 #include <cstdlib>
+#include <algorithm>
+#include <cmath>
 
 namespace ruyijs::web_graphics {
 namespace {
@@ -31,10 +33,11 @@ struct Parser {
   }
   bool Number(float* out) {
     Skip();
-    const char* begin = p;
-    while (p < end && (std::isdigit(static_cast<unsigned char>(*p)) || *p == '.')) ++p;
-    if (begin == p) return false;
-    *out = std::strtof(std::string(begin, p).c_str(), nullptr);
+    const std::string rest(p, end);
+    char* next = nullptr;
+    *out = std::strtof(rest.c_str(), &next);
+    if (next == rest.c_str()) return false;
+    p += next - rest.c_str();
     if (p < end && (*p == 'f' || *p == 'F')) ++p;
     return true;
   }
@@ -62,9 +65,7 @@ struct Parser {
       const bool add = *p == '+';
       ++p;
       const GlslValue right = Product();
-      if (left.count != right.count) { ok = false; return left; }
-      for (int i = 0; i < left.count; ++i)
-        left.value[i] = add ? left.value[i] + right.value[i] : left.value[i] - right.value[i];
+      left = Arithmetic(left, right, add ? '+' : '-');
     }
   }
   GlslValue Product() {
@@ -75,13 +76,36 @@ struct Parser {
       const bool multiply = *p == '*';
       ++p;
       const GlslValue right = Unary();
-      if (left.count != right.count || (!multiply && right.value[0] == 0.0f)) {
-        ok = false;
-        return left;
-      }
-      for (int i = 0; i < left.count; ++i)
-        left.value[i] = multiply ? left.value[i] * right.value[i] : left.value[i] / right.value[i];
+      left = Arithmetic(left, right, multiply ? '*' : '/');
     }
+  }
+  GlslValue Arithmetic(const GlslValue& left, const GlslValue& right, char op) {
+    GlslValue out;
+    if (!left.count || !right.count ||
+        (left.count != right.count && left.count != 1 && right.count != 1)) {
+      ok = false; return out;
+    }
+    out.count = std::max(left.count, right.count);
+    for (int i = 0; i < out.count; ++i) {
+      const float a = left.value[left.count == 1 ? 0 : i], b = right.value[right.count == 1 ? 0 : i];
+      out.value[i] = op == '+' ? a+b : op == '-' ? a-b : op == '*' ? a*b : a/b;
+    }
+    return out;
+  }
+  GlslValue Comparison() {
+    GlslValue left = Sum();
+    Skip();
+    if (p == end || (*p != '<' && *p != '>' && *p != '=' && *p != '!')) return left;
+    const char op = *p++;
+    const bool equal = p < end && *p == '=';
+    if (equal) ++p;
+    if ((op == '=' || op == '!') && !equal) { ok = false; return left; }
+    const GlslValue right = Sum();
+    if (left.count != 1 || right.count != 1) { ok = false; return left; }
+    const float a=left.value[0],b=right.value[0];
+    left.value[0] = op == '<' ? (equal ? a<=b : a<b) : op == '>' ? (equal ? a>=b : a>b)
+                              : op == '=' ? a==b : a!=b;
+    return left;
   }
   GlslValue Unary() {
     Skip();
@@ -119,7 +143,7 @@ struct Parser {
     if (p >= end) { ok = false; return out; }
     if (*p == '(') {
       ++p;
-      out = Sum();
+      out = Comparison();
       if (!Take(')')) ok = false;
       return out;
     }
@@ -133,17 +157,37 @@ struct Parser {
     Skip();
     if (p < end && *p == '(') {
       ++p;
-      std::vector<float> parts;
-      out.count = ConstructorSize(name);
-      if (out.count == 0) { ok = false; return out; }
+      std::vector<GlslValue> arguments;
       for (;;) {
-        const GlslValue arg = Sum();
-        for (int i = 0; i < arg.count; ++i) parts.push_back(arg.value[i]);
+        arguments.push_back(Comparison());
         if (!Take(',')) break;
       }
-      if (!Take(')') || parts.empty()) { ok = false; return out; }
-      for (int i = 0; i < out.count; ++i)
-        out.value[i] = parts[static_cast<size_t>(i) < parts.size() ? i : parts.size() - 1];
+      if (!Take(')') || arguments.empty()) { ok = false; return out; }
+      out.count = ConstructorSize(name);
+      if (out.count) {
+        std::vector<float> parts;
+        for (const auto& arg : arguments)
+          for (int i=0;i<arg.count;++i) parts.push_back(arg.value[i]);
+        if (parts.empty()) { ok=false; return out; }
+        for (int i=0;i<out.count;++i)
+          out.value[i]=parts[static_cast<size_t>(i)<parts.size()?i:parts.size()-1];
+        return out;
+      }
+      if (arguments.size() != 1) { ok=false; return out; }
+      out = arguments[0];
+      for (int i=0;i<out.count;++i) {
+        const float value=out.value[i];
+        if (name=="sin") out.value[i]=std::sin(value);
+        else if (name=="cos") out.value[i]=std::cos(value);
+        else if (name=="tan") out.value[i]=std::tan(value);
+        else if (name=="sqrt") out.value[i]=std::sqrt(value);
+        else if (name=="inversesqrt") out.value[i]=1.0f/std::sqrt(value);
+        else if (name=="abs") out.value[i]=std::abs(value);
+        else if (name=="floor") out.value[i]=std::floor(value);
+        else if (name=="ceil") out.value[i]=std::ceil(value);
+        else if (name=="fract") out.value[i]=value-std::floor(value);
+        else { ok=false; return out; }
+      }
       return out;
     }
     const GlslValue* found = lookup ? lookup(context, name.c_str(), name.size()) : nullptr;
@@ -156,7 +200,7 @@ struct Parser {
 bool GlslEvaluate(const std::string& expression, GlslLookup lookup, void* context,
                   GlslValue* out) {
   Parser parser{expression.data(), expression.data() + expression.size(), lookup, context};
-  const GlslValue value = parser.Sum();
+  const GlslValue value = parser.Comparison();
   parser.Skip();
   if (!parser.ok || parser.p != parser.end || value.count == 0) return false;
   *out = value;

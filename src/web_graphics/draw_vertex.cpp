@@ -52,14 +52,15 @@ bool ReadAttributes(JSContext*, Context& context, const std::vector<GlslDeclarat
 }
 
 void Interpolate(const double w[3], const std::vector<GlslValue>& corners, size_t count,
-                 const std::vector<GlslDeclaration>& names, std::vector<GlslValue>* out) {
+                 const std::vector<GlslDeclaration>& names, std::vector<GlslValue>* out,
+                 size_t first) {
   for (size_t i = 0; i < count; ++i) {
     GlslValue value;
     value.count = Components(names[i].type);
     for (int c = 0; c < value.count; ++c)
-      value.value[c] = float(w[0] * corners[i].value[c] +
-                             w[1] * corners[count + i].value[c] +
-                             w[2] * corners[2 * count + i].value[c]);
+      value.value[c] = float(w[0] * corners[first*count+i].value[c] +
+                             w[1] * corners[(first+1)*count+i].value[c] +
+                             w[2] * corners[(first+2)*count+i].value[c]);
     (*out)[i] = value;
   }
 }

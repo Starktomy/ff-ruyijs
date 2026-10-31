@@ -17,6 +17,7 @@ enum PublicOperation { kVoid, kNull, kZero, kMinusOne, kInvalidIndex, kFalse,
                       kUseProgram, kBufferData, kGetAttribLocation,
                       kEnableVertexAttrib, kDisableVertexAttrib, kVertexAttribPointer,
                       kUniformFloat, kDrawArrays, kReadPixels, kGetProgramParameter,
-                      kGetShaderParameter, kGetShaderSource, kGetAttachedShaders };
+                      kGetShaderParameter, kGetShaderSource, kGetAttachedShaders,
+                      kInternalformatParameter };
 }
 #endif

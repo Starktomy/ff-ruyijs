@@ -14,6 +14,8 @@ std::string Render(JSContext* cx, JS::HandleValue value);
 // WebIDL DOMString conversion (count/time labels): ToString, as Firefox does.
 std::string LabelText(JSContext* cx, JS::HandleValue value);
 std::string Join(JSContext* cx, const JS::CallArgs& args, unsigned first);
+// Console::ProcessArguments conversions; %o/%O keep objects uncoerced.
+bool Format(JSContext* cx, const JS::CallArgs& args, unsigned first, std::string* out);
 std::string Label(JSContext* cx, const JS::CallArgs& args, const char* fallback);
 // The donor devtools frontend strings for the stateful members, including the
 // typographic quotes and the `Math.round(duration * 100) / 100` duration form.

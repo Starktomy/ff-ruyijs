@@ -2,6 +2,7 @@
 // reflected width/height through the element's own public DOM methods, so the
 // content attribute stays the single source of truth.
 #include "web_canvas/internal.h"
+#include "document_model/canvas_brand.h"
 
 #include <cmath>
 #include <cstdio>
@@ -36,17 +37,7 @@ bool CanvasLanguage(State& state, JS::HandleObject context, std::string* out) {
   return true;
 }
 bool IsCanvas(State& state, JS::HandleValue value) {
-  if (!value.isObject()) return false;
-  JSContext* cx = state.cx;
-  JS::RootedObject object(cx, &value.toObject());
-  JS::RootedObject target(cx, state.canvasPrototype);
-  while (object) {
-    if (object == target) return true;
-    JS::RootedObject proto(cx);
-    if (!JS_GetPrototype(cx, object, &proto)) return false;
-    object = proto;
-  }
-  return false;
+  return document_model::IsCanvasElementValue(value);
 }
 
 bool CallMethod(JSContext* cx, JS::HandleObject receiver, const char* name,

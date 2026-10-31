@@ -92,6 +92,7 @@ struct State {
   JS::PersistentRootedObject eventMessages, eventFactory;
   JS::PersistentRootedObject extensionPrototypes;
   Model model;
+  bool disabled = false;
   std::vector<std::unique_ptr<Context>> contexts;
 };
 

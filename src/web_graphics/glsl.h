@@ -22,6 +22,12 @@ struct GlslDeclaration {
 // One assignment inside main(), e.g. "gl_Position" = "vec4(attrVertex,0,1)".
 struct GlslStatement {
   std::string target, expression;
+  bool declaration = false;
+  // A for statement executes its initial assignment, tests condition and
+  // evaluates increment after each iteration of its nested body.
+  bool loop = false;
+  std::string condition, increment;
+  std::vector<GlslStatement> body;
 };
 
 // One parsed shader stage: its globals and the assignments of its main().
@@ -50,9 +56,9 @@ inline std::string Trim(const std::string& text) {
 }  // namespace glsl_detail
 
 // Parses a vertex or fragment shader source. Declarations outside the braces and
-// "<target> = <expression>;" assignments inside them are the whole language this
-// evaluator understands; anything else is skipped, which keeps an unsupported
-// shader from drawing rather than drawing wrongly.
+// assignments, local declarations and bounded for loops inside main(). An
+// unsupported control-flow construct rejects the stage instead of running a
+// partial body.
 bool GlslParse(const std::string& source, GlslStage* stage);
 // The declarations of one kind, in source order.
 std::vector<GlslDeclaration> GlslDeclarations(const GlslStage& stage, const char* kind);

@@ -99,6 +99,12 @@ bool ContextAttributes(JSContext* cx, JS::HandleValue value, Model& model) {
 bool GraphicsPort(void* context, JS::HandleObject group) {
   State& state = *static_cast<State*>(context);
   JSContext* cx = state.cx;
+  JS::RootedValue disabled(cx);
+  if (!JS_GetProperty(cx, group, "disabled", &disabled)) return false;
+  if (!disabled.isUndefined()) {
+    if (!disabled.isBoolean()) return WebKit::Fail(cx, "webgl.disabled must be boolean");
+    state.disabled = disabled.toBoolean();
+  }
   for (int32_t index = 0; index < kOverrideCount; ++index) {
     JS::RootedValue value(cx);
     if (!JS_GetProperty(cx, group, kFields[index], &value)) return false;
@@ -131,7 +137,7 @@ bool GraphicsDescribe(void* context, JS::MutableHandleValue out) {
       &values.unmasked_renderer, &values.version2,
       &values.shading_language_version2};
   JS::RootedObject group(cx, JS_NewPlainObject(cx));
-  if (!group) return false;
+  if (!group || !JS_DefineProperty(cx, group, "disabled", state.disabled, JSPROP_ENUMERATE)) return false;
   for (int32_t index = 0; index < kOverrideCount; ++index) {
     JS::RootedString text(cx,
         JS_NewStringCopyN(cx, texts[index]->data(), texts[index]->size()));

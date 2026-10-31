@@ -18,7 +18,7 @@
 namespace ruyijs::web_console {
 namespace {
 enum Kind {
-  kPlain, kAssert, kCounter, kCounterReset, kClear, kGroup, kGroupCollapsed,
+  kPlain, kFormatted, kAssert, kCounter, kCounterReset, kClear, kGroup, kGroupCollapsed,
   kGroupEnd, kTime, kTimeLog, kTimeEnd, kTimeStamp, kProfile, kProfileEnd,
   kException, kTrace,
 };
@@ -33,13 +33,13 @@ constexpr MethodDef kDefs[] = {
     {"clear", "log", kClear},
     {"count", "log", kCounter},
     {"countReset", "log", kCounterReset},
-    {"debug", "debug", kPlain},
-    {"error", "error", kPlain},
-    {"info", "info", kPlain},
-    {"log", "log", kPlain},
+    {"debug", "debug", kFormatted},
+    {"error", "error", kFormatted},
+    {"info", "info", kFormatted},
+    {"log", "log", kFormatted},
     {"table", "log", kPlain},
     {"trace", "trace", kTrace},
-    {"warn", "warn", kPlain},
+    {"warn", "warn", kFormatted},
     {"dir", "log", kPlain},
     {"dirxml", "log", kPlain},
     {"group", "log", kGroup},
@@ -71,10 +71,23 @@ bool Emit(State& state, const MethodDef& def, int indent, std::string text,
 bool Perform(State& state, const MethodDef& def, const JS::CallArgs& args) {
   JSContext* cx = state.cx;
   const int indent = static_cast<int>(state.groups.size());
+  std::string formatted;
+  if (def.kind == kFormatted || def.kind == kException || def.kind == kAssert ||
+      def.kind == kGroup || def.kind == kGroupCollapsed || def.kind == kTrace) {
+    if (def.kind == kAssert && args.length() > 0 && JS::ToBoolean(args[0])) return true;
+    if (!Format(cx, args, def.kind == kAssert ? 1 : 0, &formatted)) {
+      // Like ConsoleCommon::ClearException, a failed argument conversion
+      // drops the console record without throwing into the caller.
+      JS_ClearPendingException(cx);
+      return true;
+    }
+  }
   switch (def.kind) {
     case kAssert:
-      if (args.length() > 0 && JS::ToBoolean(args[0])) return true;
-      return Emit(state, def, indent, "Assertion failed: " + Join(cx, args, 1));
+      return Emit(state, def, indent, "Assertion failed: " + formatted);
+    case kFormatted:
+    case kException:
+      return Emit(state, def, indent, std::move(formatted));
     case kCounter: {
       const std::string label = Label(cx, args, "default");
       if (state.counters.count(label) == 0 && state.counters.size() >= State::kCounterLimit)
@@ -90,7 +103,7 @@ bool Perform(State& state, const MethodDef& def, const JS::CallArgs& args) {
     }
     case kGroup:
     case kGroupCollapsed: {
-      const std::string joined = Join(cx, args, 0);
+      const std::string& joined = formatted;
       state.groups.push_back(joined);
       return Emit(state, def, indent, joined.empty() ? "<no group label>" : joined);
     }
@@ -128,7 +141,7 @@ bool Perform(State& state, const MethodDef& def, const JS::CallArgs& args) {
       state.log->ClearRealm(state.realm);
       return true;
     case kTrace:
-      return Emit(state, def, indent, Join(cx, args, 0), Capture(cx));
+      return Emit(state, def, indent, std::move(formatted), Capture(cx));
     default:
       return Emit(state, def, indent, Join(cx, args, 0));
   }

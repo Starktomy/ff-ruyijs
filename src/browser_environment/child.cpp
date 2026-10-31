@@ -5,11 +5,27 @@
 #include "js/String.h"
 
 namespace ruyijs::browser_environment {
+namespace {
+void InheritProfileGroups(State& target, const State& source) {
+  target.webglGroup = source.webglGroup.get();
+  target.gpuGroup = source.gpuGroup.get();
+  target.permissionsGroup = source.permissionsGroup.get();
+  target.geolocationGroup = source.geolocationGroup.get();
+  target.speechGroup = source.speechGroup.get();
+  target.mediaGroup = source.mediaGroup.get();
+  for (size_t i = 0; i < kOwnerGroupCount; ++i)
+    target.owners[i].group = source.owners[i].group.get();
+}
+}
 Environment::Environment(JSContext* cx, JS::HandleObject page, Environment& parent,
                          JS::HandleObject frameElement)
     : state_(new State(cx, page)) {
   State* owner = parent.state_;
   state_->shared = owner->shared ? owner->shared : owner;
+  // New realm-local owners consume the creator's configuration on binding,
+  // just as a Worker does. Sharing Navigator values alone leaves frame WebGL
+  // at its baseline while the creator and its Workers use the chosen profile.
+  InheritProfileGroups(*state_, *owner);
   state_->topWindow = owner->topWindow;
   state_->parentWindow = owner->page;
   state_->frameElement = frameElement;
@@ -25,11 +41,7 @@ Environment::Environment(JSContext* cx, JS::HandleObject page, Environment& prev
     : state_(new State(cx, page, &previous.state_->model)) {
   State& old = *previous.state_;
   state_->adopted = true;
-  state_->webglGroup = old.webglGroup.get();
-  state_->gpuGroup = old.gpuGroup.get();
-  state_->permissionsGroup = old.permissionsGroup.get();
-  state_->geolocationGroup = old.geolocationGroup.get();
-  state_->speechGroup = old.speechGroup.get();
+  InheritProfileGroups(*state_, old);
   state_->agentClusters = old.agentClusters;
 }
 // HTML "obtain a similar-origin window agent": an origin already in the

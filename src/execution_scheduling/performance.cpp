@@ -33,6 +33,10 @@ bool InstallPerformance(State& s,JS::HandleObject target,PageHelpers& helpers,in
  JS::SetReservedSlot(owner,PPage,JS::ObjectValue(*target));
  JS::SetReservedSlot(owner,PHandler,JS::NullValue());
  JS::SetReservedSlot(owner,PNavTiming,JS::UndefinedValue());
+ s.SyncClock();
+ // The initial Context keeps offset zero so configure_clock can still replace
+ // its epoch before execution. Later globals share the clock, not its origin.
+ JS::SetReservedSlot(owner,PInitialOffset,JS::DoubleValue(target==s.page?0:s.model.Inspect().now));
  {const uint64_t seed=uint64_t(NewTimelineSeed());
   JS::SetReservedSlot(owner,PSeedLow,JS::Int32Value(int32_t(uint32_t(seed))));
   JS::SetReservedSlot(owner,PSeedHigh,JS::Int32Value(int32_t(uint32_t(seed>>32))));}

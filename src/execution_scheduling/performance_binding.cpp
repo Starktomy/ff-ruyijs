@@ -23,13 +23,14 @@ int PerfSelector(const JS::CallArgs& args) {
 }
 // This document's navigation start in epoch milliseconds: the record the load
 // coordinator published (docs/owners/NAVIGATION_TIMING.md), or the Context
-// epoch for a document that was never navigated (the first one).
+// epoch plus this realm's creation offset for an initial blank document.
 double PerfTimeOrigin(JS::HandleObject self) {
  auto* state=static_cast<State*>(JS::GetReservedSlot(self,PClock).toPrivate());
  auto* timing=PerfNavigationRecord(self);
  state->SyncClock();
  if(timing&&timing->present)return timing->time_origin;
- return state->model.Inspect().epoch;
+ const double origin=state->model.Inspect().epoch+JS::GetReservedSlot(self,PInitialOffset).toNumber();
+ return state->model.Clock().logical?std::floor(origin):ReduceContentTime(origin,0);
 }
 JSObject* PerfFunction(JSContext* cx,JS::HandleObject owner,JSNative fn,const char* name,
                        unsigned length,int selector,unsigned flags) {

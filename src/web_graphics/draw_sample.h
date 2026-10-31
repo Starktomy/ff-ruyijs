@@ -21,5 +21,7 @@ bool InsideEdge(double weight, const double a[2], const double b[2], double sign
 // How many of the four samples of pixel (x, y) the triangle covers.
 int32_t Coverage(const double* a, const double* b, const double* c, int32_t x, int32_t y,
                  double sign);
+unsigned CoverageMask(const double* a, const double* b, const double* c, int32_t x, int32_t y,
+                      double sign);
 }  // namespace ruyijs::web_graphics::draw_detail
 #endif

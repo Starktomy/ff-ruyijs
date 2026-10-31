@@ -51,16 +51,17 @@ bool ScreenField(State& state, uint32_t field, JS::MutableHandleValue result) {
 // mozInnerScreenX 30. Uses the top-level viewport, so an iframe reports its
 // top window's origin (an offset frame is a recorded deviation, D46).
 bool InnerScreen(State& state, double* x, double* y) {
-  JS::RootedValue sx(state.cx), sy(state.cx), ow(state.cx), oh(state.cx), iw(state.cx), ih(state.cx);
-  if (!state.Read(Kind::Screen, 4, ValueType::Integer, &sx) || !state.Read(Kind::Screen, 5, ValueType::Integer, &sy) ||
-      !state.Read(Kind::Screen, 0, ValueType::Integer, &ow) || !state.Read(Kind::Screen, 1, ValueType::Integer, &oh) ||
-      !state.Read(Kind::Viewport, 0, ValueType::Integer, &iw) || !state.Read(Kind::Viewport, 1, ValueType::Integer, &ih))
+  State* top = state.topWindow ? WindowState(state.topWindow) : nullptr;
+  State& target = top ? *top : state;
+  JS::RootedValue sx(target.cx), sy(target.cx), iw(target.cx), ih(target.cx);
+  if (!target.Read(Kind::Screen, 4, ValueType::Integer, &sx) || !target.Read(Kind::Screen, 5, ValueType::Integer, &sy) ||
+      !target.Read(Kind::Viewport, 0, ValueType::Integer, &iw) || !target.Read(Kind::Viewport, 1, ValueType::Integer, &ih))
     return false;
-  // Windows Firefox's frame border is 8px; the profile's outer size is the
-  // screen size, so a smaller configured viewport must not widen the border.
-  const double border = std::min(8.0, std::max(0.0, (ow.toNumber() - iw.toNumber()) / 2));
-  *x = sx.toNumber() + border;
-  *y = sy.toNumber() + std::max(0.0, oh.toNumber() - ih.toNumber() - border);
+  // The content origin is inset by the left frame border and by the browser
+  // tab/toolbar chrome above it. Screen dimensions do not define the window
+  // frame when the browser is not maximized.
+  *x = sx.toNumber() + 8;
+  *y = sy.toNumber() + 77;
   return true;
 }
 bool InnerScreenField(State& state, bool vertical, JS::MutableHandleValue result) {
@@ -73,6 +74,18 @@ bool ViewportField(State& state, bool height, JS::MutableHandleValue result) {
   double width = 0, value = 0;
   if (!state.ReadViewport(&width, &value)) return false;
   result.setInt32(int32_t(height ? value : width));
+  return true;
+}
+bool OuterField(State& state, bool height, JS::MutableHandleValue result) {
+  State* top = state.topWindow ? WindowState(state.topWindow) : nullptr;
+  State& target = top ? *top : state;
+  double width = 0, value = 0;
+  if (!target.ReadViewport(&width, &value)) return false;
+  // Firefox's Windows outer window is the viewport plus the two 8px resize
+  // borders. Vertically it also includes the 85px tab/toolbar frame. The
+  // screen size is not the window size: a deliberately smaller viewport is a
+  // normal non-maximized browser window.
+  result.setInt32(int32_t((height ? value : width) + (height ? 85 : 16)));
   return true;
 }
 }
@@ -99,8 +112,8 @@ bool WindowGetter(JSContext* cx, unsigned argc, JS::Value* vp) {
       return true;
     case kWindowInnerWidth: return ViewportField(*state, false, args.rval());
     case kWindowInnerHeight: return ViewportField(*state, true, args.rval());
-    case kWindowOuterWidth: return ScreenField(*state, 0, args.rval());
-    case kWindowOuterHeight: return ScreenField(*state, 1, args.rval());
+    case kWindowOuterWidth: return OuterField(*state, false, args.rval());
+    case kWindowOuterHeight: return OuterField(*state, true, args.rval());
     case kWindowScreenX: return ScreenField(*state, 4, args.rval());
     case kWindowScreenY: return ScreenField(*state, 5, args.rval());
     case kWindowMozInnerScreenX: return InnerScreenField(*state, false, args.rval());
