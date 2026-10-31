@@ -15,6 +15,38 @@ from ruyijs import Context
 
 @unittest.skipUnless((ROOT / "dist/js").is_file(), "build native runtime first")
 class FontTests(unittest.TestCase):
+    def test_fontconfig_alias_preferred_and_default_bindings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            for family in ("DejaVu Sans", "DejaVu Sans Mono"):
+                font = Path(subprocess.check_output(["fc-match", "-f", "%{file}", family], text=True))
+                shutil.copy2(font, directory / font.name)
+            config = directory / "fonts.conf"
+            config.write_text(f'''<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+                <fontconfig><dir>{directory}</dir>
+                <alias binding="weak"><family>preferred-test</family>
+                    <prefer><family>DejaVu Sans Mono</family></prefer>
+                    <default><family>DejaVu Sans</family></default></alias>
+                <alias binding="strong"><family>accepted-test</family>
+                    <accept><family>DejaVu Sans Mono</family></accept></alias>
+                <alias><family>default-only-test</family>
+                    <default><family>DejaVu Sans Mono</family></default></alias>
+                <alias><family>sans-serif</family><prefer><family>DejaVu Sans</family></prefer></alias>
+                </fontconfig>''')
+            with patch.dict(os.environ, {"FONTCONFIG_FILE": str(config)}), Context(shell=ROOT / "dist/js") as ctx:
+                ctx.load_page("https://fonts.test/", "<!doctype html>")
+                results = ctx.eval("""(() => {
+                    const g=document.createElement('canvas').getContext('2d');
+                    return ['DejaVu Sans','DejaVu Sans Mono','preferred-test','accepted-test',
+                        'default-only-test, DejaVu Sans','missing-test, DejaVu Sans'].map(family=>{
+                        g.font='24px '+family;const m=g.measureText('WWW iii AV');
+                        return [m.width,m.actualBoundingBoxRight,m.fontBoundingBoxAscent];
+                    });
+                })()""")
+                self.assertNotEqual(results[0], results[1])
+                self.assertEqual(results[2:4], [results[1]] * 2)
+                self.assertEqual(results[4:], [results[0]] * 2)
+
     def test_shared_font_caches_follow_profiles_and_frame_lifetimes(self):
         snapshots = []
         for family in ("DejaVu Sans", "DejaVu Sans Mono", "DejaVu Sans"):

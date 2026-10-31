@@ -10,8 +10,11 @@
 #include "js/Conversions.h"
 #include "js/PropertyAndElement.h"
 #include "browser_environment/window_clone.h"
+#include "js/StableStringChars.h"
 #include "js/String.h"
+#include "js/Utility.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -192,14 +195,15 @@ bool WindowSetter(JSContext* cx, unsigned argc, JS::Value* vp) {
 // to a byte; atob runs the forgiving-base64 decode and returns one code unit
 // per decoded byte. Both report spec failures as InvalidCharacterError.
 namespace {
-const char kBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+constexpr char kBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 int Base64Value(char16_t unit) {
-  if (unit >= u'A' && unit <= u'Z') return unit - u'A';
-  if (unit >= u'a' && unit <= u'z') return unit - u'a' + 26;
-  if (unit >= u'0' && unit <= u'9') return unit - u'0' + 52;
-  if (unit == u'+') return 62;
-  if (unit == u'/') return 63;
-  return -1;
+  static constexpr auto values = [] {
+    std::array<int8_t, 256> table{};
+    for (auto& value : table) value = -1;
+    for (int i = 0; i < 64; ++i) table[uint8_t(kBase64[i])] = int8_t(i);
+    return table;
+  }();
+  return unit < values.size() ? values[unit] : -1;
 }
 bool AsciiSpace(char16_t unit) {
   return unit == 0x09 || unit == 0x0a || unit == 0x0c || unit == 0x0d || unit == 0x20;
@@ -207,42 +211,76 @@ bool AsciiSpace(char16_t unit) {
 bool InvalidCharacter(State& state) {
   return ThrowDOM(state, "InvalidCharacterError", "The string to be decoded is not correctly encoded");
 }
-bool Btoa(State& state, const JS::CallArgs& args, JS::MutableHandleValue result) {
-  JSContext* cx = state.cx;
-  JS::RootedString input(cx, JS::ToString(cx, args.get(0)));
-  if (!input) return false;
-  size_t length = JS_GetStringLength(input);
-  std::string encoded;
-  encoded.reserve((length + 2) / 3 * 4);
+// Both encodings read one stable string span. Decoding writes Latin-1 bytes
+// directly, avoiding whitespace-stripped and decoded UTF-16 copies plus the
+// engine's subsequent deflation of those decoded bytes.
+template <typename Char>
+bool EncodeBase64(const Char* input, size_t length, std::string* encoded) {
+  encoded->reserve((length + 2) / 3 * 4);
   uint32_t block = 0;
   size_t pending = 0;
   for (size_t index = 0; index < length; ++index) {
-    char16_t unit = 0;
-    if (!JS_GetStringCharAt(cx, input, index, &unit)) return false;
-    if (unit > 0xff) return InvalidCharacter(state);
+    const auto unit = input[index];
+    if (unit > 0xff) return false;
     block = (block << 8) | unit;
     if (++pending == 3) {
-      encoded.push_back(kBase64[(block >> 18) & 0x3f]);
-      encoded.push_back(kBase64[(block >> 12) & 0x3f]);
-      encoded.push_back(kBase64[(block >> 6) & 0x3f]);
-      encoded.push_back(kBase64[block & 0x3f]);
+      encoded->push_back(kBase64[(block >> 18) & 0x3f]);
+      encoded->push_back(kBase64[(block >> 12) & 0x3f]);
+      encoded->push_back(kBase64[(block >> 6) & 0x3f]);
+      encoded->push_back(kBase64[block & 0x3f]);
       block = 0;
       pending = 0;
     }
   }
   if (pending == 1) {
     block <<= 16;
-    encoded.push_back(kBase64[(block >> 18) & 0x3f]);
-    encoded.push_back(kBase64[(block >> 12) & 0x3f]);
-    encoded.push_back('=');
-    encoded.push_back('=');
+    encoded->push_back(kBase64[(block >> 18) & 0x3f]);
+    encoded->push_back(kBase64[(block >> 12) & 0x3f]);
+    encoded->append("==");
   } else if (pending == 2) {
     block <<= 8;
-    encoded.push_back(kBase64[(block >> 18) & 0x3f]);
-    encoded.push_back(kBase64[(block >> 12) & 0x3f]);
-    encoded.push_back(kBase64[(block >> 6) & 0x3f]);
-    encoded.push_back('=');
+    encoded->push_back(kBase64[(block >> 18) & 0x3f]);
+    encoded->push_back(kBase64[(block >> 12) & 0x3f]);
+    encoded->push_back(kBase64[(block >> 6) & 0x3f]);
+    encoded->push_back('=');
   }
+  return true;
+}
+template <typename Char>
+bool DecodeBase64(const Char* input, size_t length, JS::Latin1Char* decoded, size_t* size) {
+  uint32_t block = 0;
+  size_t digits = 0, padding = 0;
+  unsigned bits = 0;
+  for (size_t index = 0; index < length; ++index) {
+    const auto unit = input[index];
+    if (AsciiSpace(unit)) continue;
+    if (unit == '=') {
+      if (++padding > 2) return false;
+      continue;
+    }
+    const int value = Base64Value(unit);
+    if (padding || value < 0) return false;
+    ++digits;
+    block = (block << 6) | uint32_t(value);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      decoded[(*size)++] = JS::Latin1Char((block >> bits) & 0xff);
+    }
+  }
+  return digits % 4 != 1 && (!padding || (digits + padding) % 4 == 0);
+}
+bool Btoa(State& state, const JS::CallArgs& args, JS::MutableHandleValue result) {
+  JSContext* cx = state.cx;
+  JS::RootedString input(cx, JS::ToString(cx, args.get(0)));
+  if (!input) return false;
+  JS::AutoStableStringChars chars(cx);
+  if (!chars.init(cx, input)) return false;
+  std::string encoded;
+  const bool valid = chars.isLatin1()
+      ? EncodeBase64(chars.latin1Chars(), chars.length(), &encoded)
+      : EncodeBase64(chars.twoByteChars(), chars.length(), &encoded);
+  if (!valid) return InvalidCharacter(state);
   JS::RootedString text(cx, JS_NewStringCopyN(cx, encoded.data(), encoded.size()));
   if (!text) return false;
   result.setString(text);
@@ -252,43 +290,16 @@ bool Atob(State& state, const JS::CallArgs& args, JS::MutableHandleValue result)
   JSContext* cx = state.cx;
   JS::RootedString input(cx, JS::ToString(cx, args.get(0)));
   if (!input) return false;
-  size_t length = JS_GetStringLength(input);
-  std::u16string data;
-  data.reserve(length);
-  for (size_t index = 0; index < length; ++index) {
-    char16_t unit = 0;
-    if (!JS_GetStringCharAt(cx, input, index, &unit)) return false;
-    if (!AsciiSpace(unit)) data.push_back(unit);
-  }
-  if (data.size() % 4 == 0) {
-    if (data.size() >= 2 && data[data.size() - 2] == u'=' && data.back() == u'=')
-      data.resize(data.size() - 2);
-    else if (!data.empty() && data.back() == u'=') data.resize(data.size() - 1);
-  }
-  if (data.size() % 4 == 1) return InvalidCharacter(state);
-  for (char16_t unit : data)
-    if (Base64Value(unit) < 0) return InvalidCharacter(state);
-  std::u16string decoded;
-  decoded.reserve(data.size() / 4 * 3);
-  uint32_t block = 0;
-  size_t pending = 0;
-  for (char16_t unit : data) {
-    block = (block << 6) | uint32_t(Base64Value(unit));
-    if (++pending == 4) {
-      decoded.push_back(char16_t((block >> 16) & 0xff));
-      decoded.push_back(char16_t((block >> 8) & 0xff));
-      decoded.push_back(char16_t(block & 0xff));
-      block = 0;
-      pending = 0;
-    }
-  }
-  if (pending == 2) {
-    decoded.push_back(char16_t((block >> 4) & 0xff));
-  } else if (pending == 3) {
-    decoded.push_back(char16_t((block >> 10) & 0xff));
-    decoded.push_back(char16_t((block >> 2) & 0xff));
-  }
-  JS::RootedString text(cx, JS_NewUCStringCopyN(cx, decoded.data(), decoded.size()));
+  JS::AutoStableStringChars chars(cx);
+  if (!chars.init(cx, input)) return false;
+  JS::UniqueLatin1Chars decoded(static_cast<JS::Latin1Char*>(JS_malloc(cx, chars.length() / 4 * 3 + 2)));
+  if (!decoded) return false;
+  size_t size = 0;
+  const bool valid = chars.isLatin1()
+      ? DecodeBase64(chars.latin1Chars(), chars.length(), decoded.get(), &size)
+      : DecodeBase64(chars.twoByteChars(), chars.length(), decoded.get(), &size);
+  if (!valid) return InvalidCharacter(state);
+  JS::RootedString text(cx, JS_NewLatin1String(cx, std::move(decoded), size));
   if (!text) return false;
   result.setString(text);
   return true;
