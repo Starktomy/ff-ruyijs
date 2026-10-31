@@ -125,6 +125,40 @@ referenced reports, `artifacts/capskip-deep-{relations,declarations}-{before,aft
 and `artifacts/capskip-deep-stacks.log`. Debugger sampling was used only for
 hotspot identification; its elapsed times are excluded from the comparison.
 
+## Cached stylesheet fingerprints
+
+2026-11-01, baseline `91595d7`. Cascade reads and layout validation now share a
+lazy per-sheet summary of rule content and nested media presence. CSSOM writes
+invalidate the owning sheet, including nested declaration/selector/media edits,
+rule insertion/deletion, keyframe edits, source parsing and sheet replacement.
+Detached rules do not invalidate an active replacement sheet. Sheet membership,
+order, disabled/media flags and the media environment remain live inputs.
+Ordinary declaration text is hashed by reference without a temporary copy.
+
+The new behavioral regressions pass on both the baseline and optimized runtime.
+They cover nested setters and rule lists, media-list edits, iframe viewport
+changes, disabled-sheet edits, synchronous/asynchronous replacement, adopted-sheet
+order, retired rules, shared closed-shadow sheets, cross-realm edits and GC.
+The full 81-case native suite and smoke pass; Windows/macOS builds were not run.
+
+Local offline comparisons preserved all outputs: 500 computed-style rows took
+0.6155 to 0.3956 s; 1,750 declaration-benchmark rectangles took 0.7964 to 0.7861 s;
+768 relation-benchmark rectangles took 0.2810 to 0.2317 s. These single sweeps
+measure local work, not live challenge throughput.
+
+Six sequential live runs used fresh Contexts, direct networking and the Linux
+profile in baseline/optimized/optimized/baseline/baseline/optimized order. All
+six passed backend verification (`Success=true`, `Hostname=capskip.com`) with
+one verification POST and no surfaced script errors. Tokens had 624 or 645
+characters. Token medians fell from 11.418 to 10.173 s (10.9%); backend-success
+medians fell from 13.160 to 11.328 s (13.9%). Three samples per version are a
+small sample, and backend time remains variable.
+
+Ignored evidence: `artifacts/capskip-fingerprint-comparison.json`, its six live
+reports, `artifacts/capskip-fingerprint-{css,declaration,relation}-{before,after}.json`,
+`artifacts/capskip-fingerprint-native-tests.log` and
+`artifacts/capskip-fingerprint-smoke.log`.
+
 ### Remaining candidates
 
 These are code-review findings for prioritization, not measured speedups:
@@ -132,7 +166,7 @@ These are code-review findings for prioritization, not measured speedups:
 | Area | Evidence and potential next change |
 | --- | --- |
 | Layout spanning shadow scopes | `web_geometry/box_input.cpp` enables incremental style reuse only when the cached layout has at most one cascade scope. A DOM mutation in a composed tree with multiple scopes takes a fresh style pass. Extending reuse needs complete scope/dependency discovery and tests for new or removed scopes, stylesheet edits, inheritance and `:has()` invalidation. This is the leading structural candidate after the measured traversal improvements. |
-| Stylesheet fingerprints | `web_styling/cascade_sources.cpp` recursively hashes every rule's text, even to validate otherwise reusable layout. Mutation-aware sheet/rule revisions could avoid this repeated traversal, provided nested CSSOM edits, media, adopted-sheet order and disabled state all invalidate it. |
+| Stylesheet fingerprints | Addressed by the per-sheet summaries above. Further changes should measure the remaining sheet-source enumeration before caching more state. |
 | Single-attempt Python polling | Earlier profiling measured about 0.12 s across all state reads; startup was about 0.05 s. Polling or Context prewarming is therefore a lower priority for single-attempt latency on this host. |
 | Additional network concurrency | The native transport already allows 16 active asynchronous requests and six helper leases per origin. Increasing these limits needs evidence of queueing on the critical path; it does not remove style computation or a slow backend response. |
 | Batch throughput | Two independent Contexts already verified two tasks in 15.178 s versus 31.793 s serially, with 2/2 successes in each batch (`artifacts/capskip-concurrency-comparison.json`). Higher concurrency needs its own CPU, memory and success-rate measurements; it is not a demonstrated reduction in individual challenge latency. |

@@ -20,10 +20,11 @@ bool TextSet(JSContext* cx,unsigned argc,JS::Value* vp) {
   if(!CssReceiver(cx,args.thisv(),key?&kKeyframeRuleClass:&kKeyframesRuleClass,&self)||
       !CssString(cx,args.get(0),&text)) return false;
   std::vector<float> positions;
-  if(!key) RuleDataOf(self).selector=std::move(text);
+  if(!key) { RuleDataOf(self).selector=std::move(text);InvalidateRules(self); }
   else if(css::CssKeyPositions(text,&positions)) {
     RuleDataOf(self).selector=css::CssKeyText(positions);
     RuleDataOf(self).key_positions=std::move(positions);
+    InvalidateRules(self);
   }
   args.rval().setUndefined();return true;
 }
@@ -52,6 +53,7 @@ bool Call(JSContext* cx,unsigned argc,JS::Value* vp) {
           rows.reserve(rows.size()+1);
           if(!ShiftRuleWrappers(cx,self,uint32_t(rows.size()),true)) return false;
           rows.push_back(std::move(parsed.rules[0]));
+          InvalidateRules(self);
         }
       }
     } else {
