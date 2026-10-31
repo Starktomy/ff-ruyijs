@@ -39,7 +39,7 @@ class RuntimeTests(unittest.TestCase):
             for _ in range(150):
                 ctx.advance(25)
                 result = ctx.eval('workerResults')
-                if result.get('unregistered') or result.get('error'): break
+                if result.get('error') or (result.get('shared') == 41 and result.get('unregistered')): break
             self.assertEqual(result, {'shared':41,'service':42,'unregistered':True})
 
     def test_elf_process_javascript_bridge_and_errors(self):
