@@ -40,6 +40,8 @@ struct OffsetGeometry {
   NodeKey parentKey;
 };
 using OffsetGeometryPort = bool (*)(void* context, JS::HandleObject element, OffsetGeometry* out);
+using PointQueryPort = bool (*)(void* context, JS::HandleObject root, double x, double y,
+                                std::vector<NodeKey>* hits, bool* inViewport);
 // Element scroll containers (the Geometry owner keeps the position): read or
 // move it, and queue the scroll notification for a container that moved.
 struct ElementScrollPort {

@@ -1,4 +1,5 @@
 #include "document_model/state.h"
+#include <cmath>
 #include "js/Array.h"
 #include "js/Conversions.h"
 #include "js/Wrapper.h"
@@ -44,18 +45,18 @@ bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
   const int method = FunctionSlot(args);
   JS::RootedObject receiver(cx, args.thisv().isObject()
       ? js::CheckedUnwrapStatic(&args.thisv().toObject()) : nullptr);
-  if (!DocumentReceiver(cx, receiver)) return false;
+  auto* entry = DocumentReceiver(cx, receiver);
+  if (!entry) return false;
   state.Observe("Document", methods[method], int(ApiAccess::Call));
   if (argc < 2) return TypeError(cx, "Document point query requires two arguments");
   double x, y;
-  // Public methods convert both coordinates, accept non-finite values and
-  // ignore options. Conversion failures propagate instead of public crashes.
+  // Convert both coordinates before consulting the layout owner.
   if (!JS::ToNumber(cx, args[0], &x) || !JS::ToNumber(cx, args[1], &y)) return false;
-  if (method == 1) {
-    JS::RootedObject array(cx, JS::NewArrayObject(cx, 0));
-    if (!array) return false;
-    args.rval().setObject(*array);
-  } else args.rval().setNull();
+  if (method < 2) {
+    if (!std::isfinite(x) || !std::isfinite(y)) return TypeError(cx, "Point coordinates must be finite");
+    return PointQuery(cx, *entry, x, y, method == 1, args.rval());
+  }
+  args.rval().setNull();
   return true;
 }
 }

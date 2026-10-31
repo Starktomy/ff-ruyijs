@@ -4,7 +4,7 @@
 #include "js/RootingAPI.h"
 #include "document_model/svg_points_types.h"
 namespace ruyijs { class PageHelpers; }
-namespace ruyijs::document_model { struct GeometryNode; struct LayoutNodeSource; struct OffsetGeometry; struct SvgViewBoxValue; }
+namespace ruyijs::document_model { struct GeometryNode; struct LayoutNodeSource; struct OffsetGeometry; struct NodeKey; struct SvgViewBoxValue; }
 namespace ruyijs::web_styling { struct ComputedStyle; class ComputedStyleReader; }
 namespace ruyijs::web_geometry {
 struct State;
@@ -78,6 +78,8 @@ class Realm final {
   bool MeasureElement(JS::HandleObject, std::array<double, 4>*, bool* present, bool content = false);
   bool MeasureOffset(JS::HandleObject, document_model::OffsetGeometry*);
   bool UsedDimensions(JS::HandleObject, double*, double*, bool* present);
+  bool PointCandidates(JS::HandleObject root, double x, double y,
+                       std::vector<document_model::NodeKey>*, bool* inViewport);
   // An element scroll container's position (box_scroll.cpp): read, or with
   // |write| clamp and store (*changed when it moved). 0,0 for a non-container.
   bool ElementScroll(JS::HandleObject, bool write, double* x, double* y, bool* changed);
