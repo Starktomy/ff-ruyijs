@@ -130,6 +130,46 @@ These are small live samples, not a general success-rate or latency guarantee.
 Token acquisition timings exclude backend verification. Evidence without tokens
 or cookie values: `artifacts/turnstile-demo-tests/results.json`.
 
+### Generic solver resource usage
+
+2026-11-01, commit `99edd33`, AMD EPYC 7643 host with five available logical CPUs,
+about 9.66 GiB RAM, direct connections and the Linux profile. Each call creates
+and closes a fresh Context, with `timeout=30`, `attempts=1`. The following
+CapSkip results are medians of three batches per concurrency level:
+
+| Concurrent solves | Token latency | Batch duration | CPU seconds per token | Average CPU cores | Peak tree PSS | Peak tree RSS | Batch throughput, extrapolated |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 3.212 s | 3.213 s | 3.889 | 1.25 | 399 MiB | 598 MiB | 18.7/min |
+| 2 | 3.018 s | 3.254 s | 3.394 | 2.09 | 695 MiB | 1116 MiB | 36.9/min |
+| 4 | 3.774 s | 4.056 s | 3.553 | 3.42 | 1207 MiB | 2194 MiB | 59.2/min |
+
+The three serial CapSkip calls consumed 3.328–4.105 CPU seconds each; sampled
+peak PSS was 390–409 MiB. A single NOL control used 3.908 CPU seconds, 402 MiB
+peak PSS and 3.523 s wall time; a ZeroCaptcha action/cData control used 3.714 CPU
+seconds, 386 MiB peak PSS and 3.263 s wall time. All 23 measured calls returned
+non-dummy tokens on the first attempt. These runs measure token acquisition;
+backend submission is excluded. No processes remained in any measurement group
+after cleanup. Sampled maximum process counts, including the Python caller,
+were 6, 10 and 20 for concurrency 1, 2 and 4 respectively.
+
+CPU is the `cpu.stat` delta of a new cgroup containing the Python caller and
+all descendants. It includes Context startup, native JavaScript, workers,
+network helpers and cleanup, but excludes initial Python imports and the
+external sampler. An initial `getrusage(SELF)+getrusage(CHILDREN)` measurement
+missed some descendant CPU and is not used for these results.
+
+Memory is sampled every 50 ms and summed across simultaneous live processes.
+PSS apportions shared pages; summed RSS counts shared mappings multiple times.
+The idle Python caller contributes about 17 MiB PSS. Sampled peaks can miss
+short spikes. The external memory sampler itself used roughly 0.2–0.6 CPU cores
+while running; its CPU is excluded, but wall time can include contention.
+The throughput figures are short-batch estimates, not a sustained-load result.
+Challenge variation, retries and host load can change all of these numbers.
+
+Reproducible probe and token-free results are in
+`artifacts/turnstile-resource-benchmark/measure.py` and `results.json` in that
+directory. `preflight-*` files are superseded diagnostic measurements.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX
