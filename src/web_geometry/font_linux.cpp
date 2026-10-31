@@ -26,12 +26,13 @@
 
 namespace ruyijs::web_geometry {
 struct FontCollection {
-  sk_sp<SkFontMgr> manager = [] {
-    auto* config = FcInitLoadConfigAndFonts();
+  FcConfig* config = nullptr;  // Owned by manager.
+  sk_sp<SkFontMgr> manager = [this] {
+    config = FcInitLoadConfigAndFonts();
     if (!config) return sk_sp<SkFontMgr>();
     const auto* directory = std::getenv("RUYIJS_FONT_DIRECTORY");
     if (directory && *directory && !FcConfigAppFontAddDir(config, reinterpret_cast<const FcChar8*>(directory))) {
-      FcConfigDestroy(config); return sk_sp<SkFontMgr>();
+      FcConfigDestroy(config); config = nullptr; return sk_sp<SkFontMgr>();
     }
     return SkFontMgr_New_FontConfig(config, SkFontScanner_Make_FreeType());
   }();
@@ -227,6 +228,30 @@ SkMatrix Matrix(const float values[6]) {
 }
 SystemFonts::SystemFonts() : collection_(std::make_unique<FontCollection>()) {}
 SystemFonts::~SystemFonts() = default;
+bool SystemFonts::HasLocalFont(const std::string& name) {
+  if (name.empty() || name.find('\0') != std::string::npos || !collection_->manager) return false;
+  const auto* wanted = reinterpret_cast<const FcChar8*>(name.c_str());
+  for (FcSetName kind : {FcSetSystem, FcSetApplication}) {
+    FcFontSet* fonts = FcConfigGetFonts(collection_->config, kind);
+    if (!fonts) continue;
+    for (int i = 0; i < fonts->nfont; ++i) {
+      FcPattern* font = fonts->fonts[i];
+      bool matches = false;
+      for (const char* property : {FC_FULLNAME, FC_POSTSCRIPT_NAME}) {
+        FcChar8* value = nullptr;
+        for (int n = 0; FcPatternGetString(font, property, n, &value) == FcResultMatch; ++n)
+          if (FcStrCmpIgnoreCase(value, wanted) == 0) { matches = true; break; }
+        if (matches) break;
+      }
+      if (!matches) continue;
+      FcChar8* family = nullptr;
+      if (FcPatternGetString(font, FC_FAMILY, 0, &family) != FcResultMatch) continue;
+      std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
+      if (FontFamilyVisible(convert.from_bytes(reinterpret_cast<const char*>(family)))) return true;
+    }
+  }
+  return false;
+}
 void SetDevicePixelRatio(double ratio) { if (std::isfinite(ratio) && ratio > 0) pixelRatio = ratio; }
 void SetBrowserLanguage(const std::string& value) { std::lock_guard<std::mutex> lock(languageLock); browserLanguage = value; }
 std::string DefaultGenericFamily() { return "serif"; }

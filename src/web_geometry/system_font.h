@@ -101,6 +101,11 @@ class SystemFonts final {
   bool LineMetrics(const FontInput&, double* content, double* normal);
   // SVG ex/ch/ic/cap sizes from the shared collection (svg_length_font.cpp).
   bool SvgLengthMetrics(const FontInput&, float* ex, float* ch, float* ic, float* cap);
+#if defined(__linux__)
+  // CSS local() matches an installed full or PostScript face name, without
+  // Fontconfig substitution, and honors the same family visibility profile.
+  bool HasLocalFont(const std::string& name);
+#endif
  private:
   std::unique_ptr<FontCollection> collection_;
 };
