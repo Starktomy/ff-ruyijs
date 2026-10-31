@@ -45,6 +45,9 @@ class ComputedStyleReader final {
   explicit ComputedStyleReader(State&);
   ~ComputedStyleReader();
   bool Read(JS::HandleObject, ComputedStyle*);
+  // Resolve a scope and its selector dependencies without computing a style.
+  // Geometry primes all cached scopes before reusing styles after inline edits.
+  bool PrepareScope(JS::HandleObject, size_t* scopeIndex = nullptr);
   // Firefox getDefaultComputedStyle: the same cascade with user-agent rules
   // only (no author sheets and no inline style on the element or its ancestors).
   bool ReadDefault(JS::HandleObject, ComputedStyle*);

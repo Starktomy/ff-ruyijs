@@ -101,10 +101,12 @@ bool HasReach(const web_styling::SelectorDependencies& has, const LayoutCache::A
 uint64_t AttributeHash(const document_model::LayoutNodeSource& source) {
   uint64_t hash = 1469598103934665603ull;
   for (const auto& attr : source.attributes) {
-    if (attr.name == u"style") continue;
     for (char16_t c : attr.name) { hash ^= c; hash *= 1099511628211ull; }
     hash ^= 0x3d; hash *= 1099511628211ull;
-    for (char16_t c : attr.value) { hash ^= c; hash *= 1099511628211ull; }
+    // Track [style] presence, including style="", separately from its value.
+    // Values are compared through inline_styles and selector dependencies.
+    if (attr.name != u"style")
+      for (char16_t c : attr.value) { hash ^= c; hash *= 1099511628211ull; }
     hash ^= 0x1f; hash *= 1099511628211ull;
   }
   return hash;
@@ -157,6 +159,9 @@ bool Visit(State& s, JS::HandleObject object, JS::HandleObject target, size_t pa
   // With a selector on the style attribute, an inline-style change reaches
   // other elements like any attribute change (unknown before the first read).
   const bool style_reach=restyled && (!styles.Scopes() || styles.Dependencies().styleAttribute);
+  // BoxStyle omits custom properties. An inline edit in a reused multi-scope
+  // tree must restyle descendants even when the parent's box style is equal.
+  const bool inline_subtree=restyled && previous->scopes.size()>1;
   const bool dirty=inherited_dirty || before==size_t(-1) || changed || style_reach || moved || own_children;
   if(source.element && styles.Scopes()) {
     const auto& dependencies=styles.Dependencies();
@@ -168,7 +173,14 @@ bool Visit(State& s, JS::HandleObject object, JS::HandleObject target, size_t pa
       node.style=previous->nodes[before].style;same=true;
     } else {
       web_styling::ComputedStyle style;
+      const size_t beforeScopes=styles.Scopes();
       if(!styles.Read(object,&style)) return false;
+      // Revealing a previously hidden shadow tree may add dependencies after
+      // earlier styles were reused. Restart without reuse in that case.
+      if(previous && beforeScopes && styles.Scopes()!=beforeScopes) {
+        pass.restart=true;
+        return true;
+      }
       // Layout reads no custom property; dropping them keeps BoxStyle::Get short.
       std::erase_if(style.values,[](const auto& value){return value.first.starts_with("--");});
       node.style={std::move(style.values),style.fontSize,style.rootFontSize,
@@ -213,7 +225,7 @@ bool Visit(State& s, JS::HandleObject object, JS::HandleObject target, size_t pa
   for(size_t i=0;i<children.length();++i) {
     JS::RootedObject child(s.cx,children[i]);
     const size_t child_index=nodes->size();
-    if(!Visit(s,child,target,index,pass,depth+1,dirty||sibling_dirty||all_children,before,i)) return false;
+    if(!Visit(s,child,target,index,pass,depth+1,dirty||inline_subtree||sibling_dirty||all_children,before,i)) return false;
     if(child_index<pass.dirty.size() && pass.dirty[child_index]) sibling_dirty=true;
   }
   return true;
@@ -307,9 +319,17 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   auto styles=s.boxPorts.styles(s.boxPorts.context);
   if(!styles) return false;
   Pass pass{*cache,size_t(-1),*styles};
-  // A fresh reader must rediscover every scope after a DOM change. The
-  // incremental selector-dependency path below currently covers one scope.
-  if(reusable&&cached->scopes.size()<=1) {
+  // Across multiple scopes, reuse only after inline-style changes: structure
+  // and other attributes must be unchanged, so scope membership is stable.
+  // Prime every old scope before using its merged selector dependencies. New
+  // scopes revealed by display changes restart the pass without style reuse.
+  if(reusable&&(cached->scopes.size()<=1||cached->structure==structure)) {
+    if(cached->scopes.size()>1) {
+      for(const auto& scope:cached->scopes) {
+        JS::RootedObject sample(s.cx,scope.sample->get());
+        if(!styles->PrepareScope(sample)) return false;
+      }
+    }
     pass.previous=cached.get();
     pass.reached.assign(cached->nodes.size(),0);
   }
@@ -325,7 +345,7 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
           pass.restart=true;
     }
   }
-  if(pass.restart) {  // a :has() argument may have changed: lay out without reuse
+  if(pass.restart) {  // changed :has() inputs or a new scope: lay out without reuse
     *cache=LayoutCache();
     pass.previous=nullptr; pass.restart=false; pass.found=size_t(-1);
     pass.same.clear(); pass.dirty.clear(); pass.reached.clear();

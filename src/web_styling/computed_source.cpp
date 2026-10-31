@@ -61,6 +61,27 @@ void ComputeColors(ComputedStyle* style) {
 }  // namespace
 ComputedStyleReader::ComputedStyleReader(State& state):impl_(std::make_unique<Impl>(state)) {}
 ComputedStyleReader::~ComputedStyleReader() = default;
+bool ComputedStyleReader::PrepareScope(JS::HandleObject element, size_t* scopeIndex) {
+  State& state = impl_->state;
+  if (!state.cascadeScope || !state.sheetsPort)
+    return WebKit::Fail(state.cx, "getComputedStyle is not available");
+  JS::RootedObject scope(state.cx);
+  bool shadow=false;
+  if (!state.cascadeScope(state.adoptedContext,element,&scope,&shadow)) return false;
+  scope=js::CheckedUnwrapStatic(scope);
+  size_t index=0;
+  for(;index<impl_->scopes.length();++index) if(impl_->scopes[index]==scope) break;
+  if(index==impl_->scopes.length()) {
+    auto entry=std::make_unique<Impl::Scope>();
+    std::shared_ptr<const SelectorDependencies> dependencies;
+    if (!ReadCascadeSources(state,element,&entry->aggregates,&dependencies,&entry->computation.store)||
+        !impl_->scopes.append(scope) || !impl_->samples.append(element)) return false;
+    if (dependencies) impl_->dependencies.Merge(*dependencies);
+    impl_->sources.push_back(std::move(entry));
+  }
+  if (scopeIndex) *scopeIndex = index;
+  return true;
+}
 bool ComputedStyleReader::Read(JS::HandleObject element, ComputedStyle* out) {
   namespace css = ruyijs::domain::styling;
   State& state=impl_->state;
@@ -76,20 +97,8 @@ bool ComputedStyleReader::Read(JS::HandleObject element, ComputedStyle* out) {
   SelectorInput& input = *impl_->input;
   const auto* node = input.Load();
   if (!node) return false;
-  JS::RootedObject scope(state.cx);
-  bool shadow=false;
-  if (!state.cascadeScope(state.adoptedContext,element,&scope,&shadow)) return false;
-  scope=js::CheckedUnwrapStatic(scope);
-  size_t index=0;
-  for(;index<impl_->scopes.length();++index) if(impl_->scopes[index]==scope) break;
-  if(index==impl_->scopes.length()) {
-    auto entry=std::make_unique<Impl::Scope>();
-    std::shared_ptr<const SelectorDependencies> dependencies;
-    if (!ReadCascadeSources(state,element,&entry->aggregates,&dependencies,&entry->computation.store)||
-        !impl_->scopes.append(scope) || !impl_->samples.append(element)) return false;
-    if (dependencies) impl_->dependencies.Merge(*dependencies);
-    impl_->sources.push_back(std::move(entry));
-  }
+  size_t index;
+  if (!PrepareScope(element, &index)) return false;
   auto& source=*impl_->sources[index];
   std::vector<const css::StyleSheetAggregate*> pointers;
   pointers.reserve(source.aggregates->size());
