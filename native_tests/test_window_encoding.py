@@ -28,6 +28,11 @@ class WindowEncodingTests(unittest.TestCase):
                     atob(' \\t\\r\\n\\f')===''];
             })()""")
             self.assertEqual(result, [True] * 6)
+            sizes = (0, 1, 2, 3, 1022, 1023, 1024, 1025, 4095, 4096)
+            vectors = [bytes(range(256)) * (size // 256) + bytes(range(size % 256)) for size in sizes]
+            context.set("vectors", [[base64.b64encode(value).decode(), value.decode("latin1")]
+                                    for value in vectors])
+            self.assertTrue(context.eval("vectors.every(([encoded,raw])=>atob(encoded)===raw && btoa(raw)===encoded)"))
             context.collect_garbage()
             self.assertEqual(context.eval("atob(encoded).length"), len(data))
 
