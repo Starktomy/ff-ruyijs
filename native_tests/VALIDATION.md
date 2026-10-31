@@ -1,7 +1,10 @@
-# Native Linux validation — 2026-10-30
+# Native Linux validation — 2026-10-31
 
-Latest iframe follow-up: **41 native tests, 5 installed-package tests and all
-6 official Turnstile test scenarios pass**. Earlier port and performance
+Latest live-challenge follow-up: **86 native tests pass**, with zero CreepJS
+lies in the observed Akamai-profile collection. The real CapSkip Turnstile
+challenge remains rejected; see the final section. Earlier iframe validation
+passed 5 installed-package tests and all 6 official Turnstile test scenarios.
+Earlier port and performance
 validation is retained below as the benchmark baseline. See also
 `PERFORMANCE.md` and `IFRAME_COMPATIBILITY.md`.
 
@@ -182,3 +185,89 @@ Wheel size: 72,156,360 bytes; SHA256
 Logs and sanitized aggregates remain in ignored `artifacts/iframe-*` files.
 Windows compilation and the original Wine script failure were not reproduced
 in this follow-up; the shared runtime change was compiled and tested on Linux.
+
+## Live CapSkip Turnstile follow-up
+
+`python -m ruyijs.examples cloudflare-live` loads the original CapSkip demo at
+`https://capskip.com/captcha-demo/cloudflare-turnstile/`, waits for its real
+Cloudflare widget, clicks an available checkbox through native frame/shadow
+input, and waits for the site's own backend verification. It reports success
+only when the page confirms a non-dummy token validated for `capskip.com`.
+Challenge failure codes and verification request counts are retained in JSON.
+
+Local reproductions found that host and script clicks never toggled a checkbox
+or emitted its input/change events. They now toggle before click listeners,
+restore checked/indeterminate values on cancellation, and dispatch trusted
+input/change after an accepted connected activation. Input crosses a closed
+shadow root while change stays inside it. The form owner's live checked and
+indeterminate states now feed both DOM selectors and the CSS cascade; setting
+checkedness/selectedness invalidates the original style cache without changing
+content attributes. This also covers radio groups, options and progress state
+through the existing domain records.
+
+Iframe and successor-document owners now inherit the configured WebGL/WebGPU,
+permissions, geolocation, speech and media groups. Canvas and Navigator GPU
+accessors reject forged receivers; a foreign same-origin Navigator resolves its
+own GPU object. Transformed rectangles round their origin and extent separately
+as in Gecko's `ScaleThenRoundGfxRectToAppRect`, before `DOMRect::SetLayoutRect`.
+Console `%s`, `%d`, `%i`, `%f` and `%c` now perform the donor's argument
+conversions while `%o`/`%O` retain objects without invoking their getters.
+
+The challenge also uses GLSL local variables, for loops, scalar/vector
+arithmetic, `gl_FragCoord`, `sin`/`cos`, `fract` and `inversesqrt`. The software
+shader subset now evaluates these operations with an instruction budget.
+Triangle strips preserve each sample until the strip is resolved and
+interpolate from each triangle's actual vertices. Pixel regressions check a
+solid strip without seams, coordinate-dependent loop output, transcendental
+functions, varying interpolation and large finite vertex coordinates. This
+remains a software subset, without native GPU execution or
+established Windows GPU precision equivalence.
+
+Native API errors now use SpiderMonkey's reporting path to retain caller stacks
+and source locations, including errors thrown by foreign-realm methods. Initial
+about:blank iframes use their own creation time as performance time origin;
+detach/reinsert creates a fresh timeline without changing retained old windows.
+Mouse/Pointer/Wheel/Drag `which` reads the native button field as in Gecko.
+Mouse page coordinates include the owning document's scroll, and offsets use
+the target padding edge, with the existing 2D transform projection inverted.
+Tests cover borders, scaling and singular transforms, scrolling inside an
+iframe, closed-shadow retargeting, and page-overridden geometry methods.
+This does not add 3D layout, point hit-testing or a renderer.
+PointerEvent coalesced/predicted sequences now copy and validate their inputs,
+return fresh arrays with stable sample identities, and preserve foreign-realm
+PointerEvents. Trusted pointer motion generates an independent sample with the
+same timestamp and coordinates, without recursively generating more samples.
+Ordinary clicks and default synthetic events have empty sample lists.
+
+Forty-five local regressions cover these changes. The rebuilt Linux runtime
+passes **86 native tests in 32.614 s**, the upstream smoke test,
+changed-source pyflakes and whitespace checks with CRLF accounted for.
+The unchanged official public-key success/Siteverify case also passes.
+Windows compilation was not performed.
+
+The live runner can import the actual Akamai or DataDome configuration and
+Akamai's timed pointer generator, with matched Firefox TLS/User-Agent versions.
+Inspecting CreepJS's detailed `Fingerprint` object after the fixes gives
+`lies.totalLies: 0` and `hasBadWebGL: false`; the example's collection-completed
+status alone was insufficient to assess those properties.
+
+The real CapSkip key still returns `600010` after native interaction, with no
+token or backend verification request. Both the original full page and an
+isolated reproduction using its original widget script exhibit the failure.
+The latest original-page run used the Akamai profile, TLS 159, complete pointer
+motion and one checkbox click: 83 requests, no script errors,
+`tokenLength: 0`, `verificationRequests: 0`, in 165.278 seconds.
+An independently controlled Firefox 159 on the same Xvfb display and network
+also returned `600010` after a trusted X11 click. This establishes an external
+policy or network component in the current environment; it does not make the
+engine run successful.
+These fixes address reproduced browser behavior; this result does not establish
+production Cloudflare acceptance. Live reports remain in ignored
+`artifacts/cloudflare-capskip-*.json` files.
+
+Cloudflare's official troubleshooting page passed its automation-flag, clock,
+privacy-interference and connectivity checks in this environment. That does
+not establish challenge compatibility. Document and ShadowRoot point queries,
+live computed styles, WebIDL receiver errors, Grid placement and all 53 captured
+WebGL2 internal-format sample queries now match local Firefox 159 differential
+fixtures. No fabricated success response was added.

@@ -9,6 +9,7 @@ EXAMPLES = {
     "datadome": ("DataDome/datadome.py", "DataDome 设备检测"),
     "creepjs": ("creepjs/creepjs.py", "CreepJS"),
     "cloudflare": ("cloudflare/turnstile.py", "Cloudflare Turnstile (official test keys)"),
+    "cloudflare-live": ("cloudflare/capskip.py", "CapSkip Turnstile (live server verification)"),
 }
 
 

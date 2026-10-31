@@ -225,6 +225,7 @@ python -m ruyijs.examples akamai               # Akamai Bot Manager 3.x
 python -m ruyijs.examples datadome             # DataDome interstitial device-check
 python -m ruyijs.examples creepjs              # CreepJS fingerprint audit
 python -m ruyijs.examples cloudflare           # Turnstile official dummy-key integration
+python -m ruyijs.examples cloudflare-live      # CapSkip live Turnstile and server verification
 ```
 
 Every example supports `--direct` (direct connection) and `--proxy http://127.0.0.1:7890`. Add `--help` after a name for all options, and `--output result.json` to save results. Each example directory ships its own README.
