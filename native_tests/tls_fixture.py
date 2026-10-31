@@ -35,6 +35,10 @@ class H1(BaseHTTPRequestHandler):
             if self.path == "/gzip":
                 body = gzip.compress(body)
                 self.send_header("Content-Encoding", "gzip")
+            elif self.path == "/zstd":
+                import zstandard
+                body = zstandard.ZstdCompressor(write_content_size=False).compress(body)
+                self.send_header("Content-Encoding", "zstd")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

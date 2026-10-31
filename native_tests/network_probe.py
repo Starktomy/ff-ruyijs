@@ -21,6 +21,35 @@ def body(response):
     return response.raw.read(8 * 1024 * 1024)
 
 
+class ContentDecodingChecks(unittest.TestCase):
+    def compressed(self, body, *, size=False):
+        # Encode with the independent python-zstandard binding; the helper
+        # decodes with CPython's incremental zstd API (or its backport).
+        import zstandard
+        return zstandard.ZstdCompressor(write_content_size=size).compress(body)
+
+    def test_zstd_without_content_size_and_concatenated_frames(self):
+        payload = self.compressed(b"native-zstd:")
+        self.assertEqual(decode_body(payload, "zstd"), b"native-zstd:")
+        self.assertEqual(decode_body(payload + self.compressed(b"second", size=True), "zstd"),
+                         b"native-zstd:second")
+
+    def test_zstd_rejects_incomplete_frames_and_trailing_data(self):
+        payload = self.compressed(b"native-zstd:")
+        for bad in (b"", payload[:-1], payload + payload[:-1], payload + b"trailing"):
+            with self.subTest(payload=bad), self.assertRaises(ValueError):
+                decode_body(bad, "zstd")
+
+    def test_zstd_enforces_total_output_limit(self):
+        limit = 8 * 1024 * 1024
+        self.assertEqual(len(decode_body(self.compressed(b"x" * limit), "zstd")), limit)
+        for payload in (self.compressed(b"x" * (limit + 1)),
+                        self.compressed(b"x" * (limit + 1), size=True),
+                        self.compressed(b"x" * limit) + self.compressed(b"y")):
+            with self.subTest(encoded_size=len(payload)), self.assertRaisesRegex(ValueError, "8 MiB"):
+                decode_body(payload, "zstd")
+
+
 class TLSChecks(Certificates, unittest.TestCase):
     def setUp(self):
         self.server = Server(("127.0.0.1", 0), Handler)
@@ -45,7 +74,7 @@ class TLSChecks(Certificates, unittest.TestCase):
 
     def test_h1_chunked_compression_and_duplicate_cookies(self):
         self.server.tls.set_alpn_protocols(["http/1.1"])
-        for path in ("/", "/chunked", "/gzip"):
+        for path in ("/", "/chunked", "/gzip", "/zstd"):
             response = self.client.fetch("GET", self.url + path, [], b"", 4)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.raw.version, 11)

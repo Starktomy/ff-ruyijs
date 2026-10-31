@@ -6,6 +6,7 @@ import zlib
 from necko.client import NeckoError
 
 _HOP_BY_HOP = {"content-encoding", "transfer-encoding", "content-length", "connection"}
+_BODY_LIMIT = 8 * 1024 * 1024  # ResourceNetwork's decoded response limit.
 
 
 class RequestControl:
@@ -84,9 +85,33 @@ def decode_body(payload, encoding):
         import brotli
         return brotli.decompress(payload)
     if coding == "zstd":
-        import zstandard
-        return zstandard.ZstdDecompressor().decompress(payload)
+        return _decode_zstd(payload)
     raise ValueError("Unsupported content encoding")
+
+
+def _decode_zstd(payload):
+    # HTTP responses may omit the frame content size and concatenate frames.
+    # The incremental API bounds output without trusting a declared size, and
+    # eof/unused_data let us reject a truncated frame instead of losing data.
+    try:
+        from compression import zstd
+    except ImportError:
+        from backports import zstd
+    result = bytearray()
+    while True:
+        decoder = zstd.ZstdDecompressor(
+            options={zstd.DecompressionParameter.window_log_max: 23})
+        try:
+            result.extend(decoder.decompress(payload, max_length=_BODY_LIMIT + 1 - len(result)))
+        except zstd.ZstdError as error:
+            raise ValueError(f"Invalid zstd response body: {error}") from error
+        if len(result) > _BODY_LIMIT:
+            raise ValueError("Response body exceeds 8 MiB")
+        if not decoder.eof:
+            raise ValueError("Incomplete zstd response body")
+        payload = decoder.unused_data
+        if not payload:
+            return bytes(result)
 
 
 def elapsed_ms(control):
