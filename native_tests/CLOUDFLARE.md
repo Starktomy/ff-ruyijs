@@ -159,13 +159,47 @@ reports, `artifacts/capskip-fingerprint-{css,declaration,relation}-{before,after
 `artifacts/capskip-fingerprint-native-tests.log` and
 `artifacts/capskip-fingerprint-smoke.log`.
 
+## Incremental styles after inline edits across shadow scopes
+
+After the fingerprint change (`7dfeafd`), a composed layout may reuse unchanged
+styles across multiple cascade scopes when only inline styles changed. All
+previous scopes and their selector dependencies are prepared before reuse.
+Structural/other-attribute changes retain the full style pass. Revealing an
+unseen scope restarts without reuse; inline edits restyle descendants to retain
+custom-property inheritance even when the parent's box properties are equal.
+The attribute fingerprint also tracks empty `style` attribute presence for
+`[style]` and `:has()` selectors.
+
+The added regressions pass on the previous runtime and this version. They cover
+variables, inherited font sizes, sibling and `:has()` dependencies, empty style
+attributes, hidden/revealed nested scopes, CSSOM edits, scope moves and GC.
+All 84 native tests and smoke pass. No Windows/macOS native build was run.
+
+A local 200-element nested-shadow benchmark preserved all 3,200 rectangles.
+Adding a style attribute before each measurement took 0.7903 to 0.7547 s;
+editing an existing style attribute took 0.7964 to 0.5401 s. The former takes
+more conservative dependency invalidation because attribute presence changes.
+These are single offline sweeps, not challenge throughput measurements.
+
+Six fresh-context live attempts alternated baseline/optimized/optimized/baseline/
+baseline/optimized with direct networking and the Linux profile. All passed the
+original page's backend check with one POST and no surfaced script errors.
+Token medians were 10.034 versus 9.743 s; backend medians were 11.148 versus
+10.973 s. This small difference and the 9.355–11.521 s token range do not establish
+a stable live speedup; the repeatable reduction is in the targeted local work.
+
+Ignored evidence: `artifacts/capskip-shadow-comparison.json`, its six live reports,
+`artifacts/capskip-reuse-{shadow,shadow_existing_style}-{before,after}.json`,
+`artifacts/capskip-shadow-reuse-native-tests.log` and
+`artifacts/capskip-shadow-reuse-smoke.log`.
+
 ### Remaining candidates
 
 These are code-review findings for prioritization, not measured speedups:
 
 | Area | Evidence and potential next change |
 | --- | --- |
-| Layout spanning shadow scopes | `web_geometry/box_input.cpp` enables incremental style reuse only when the cached layout has at most one cascade scope. A DOM mutation in a composed tree with multiple scopes takes a fresh style pass. Extending reuse needs complete scope/dependency discovery and tests for new or removed scopes, stylesheet edits, inheritance and `:has()` invalidation. This is the leading structural candidate after the measured traversal improvements. |
+| Layout spanning shadow scopes | Inline-only changes now reuse styles as described above. Structural and other-attribute changes retain a complete style pass; extending those cases needs per-scope membership and dependency validation. |
 | Stylesheet fingerprints | Addressed by the per-sheet summaries above. Further changes should measure the remaining sheet-source enumeration before caching more state. |
 | Single-attempt Python polling | Earlier profiling measured about 0.12 s across all state reads; startup was about 0.05 s. Polling or Context prewarming is therefore a lower priority for single-attempt latency on this host. |
 | Additional network concurrency | The native transport already allows 16 active asynchronous requests and six helper leases per origin. Increasing these limits needs evidence of queueing on the critical path; it does not remove style computation or a slow backend response. |
