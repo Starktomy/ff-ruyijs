@@ -68,6 +68,75 @@ Local ignored evidence: `artifacts/capskip-speed-comparison.json`, the four
 referenced live reports, `artifacts/capskip-{font,css}-{before,after}.json`,
 `artifacts/capskip-speed-native-tests.log` and `artifacts/capskip-speed-smoke.log`.
 
+## Second performance pass
+
+2026-11-01, baseline `a227ab5` (including the preceding font/cache optimizations),
+optimized runtime `3830ee3`. Native stack samples now frequently landed in
+selector ancestor/sibling traversal and style computation, rather than font
+matching. Three changes remove work without changing the selected rules or
+the challenge's clock:
+
+- `SelectorInput` resolves each parent/previous/next/first-child relation once
+  per style read or layout pass, including absent relations. Stable map entries
+  own the pointers; the whole session is discarded before later DOM mutations.
+  Default-style copies detach the relation owner, and cross-document identities
+  remain distinct. No live DOM pointers are cached between operations.
+- The shared immutable rule index stores the physical expansion of a rule's
+  declarations after its first match. Variables still resolve for each element;
+  specificity, importance and source order still participate in every cascade.
+  Existing content fingerprints replace the store after CSSOM changes.
+- A shared style computation no longer allocates an unused local context and
+  rule-index store for every element and inherited ancestor.
+
+Offline comparisons preserved all outputs: 768 rectangles in the relation
+benchmark (0.3535 to 0.2894 s), and 1,750 rectangles in a repeated logical-rule
+benchmark (1.0850 to 0.7779 s). The latter compares the relation-only build
+against the final build, isolating the declaration/context changes. These
+microbenchmarks describe local costs, not live Turnstile throughput.
+
+Six sequential live attempts used fresh Contexts, the same direct connection
+and Linux profile, in this order: original, optimized, optimized, original,
+original, optimized. All six exited 0, received non-dummy 624-character tokens,
+made one verification POST each and passed the page's backend verification
+with no surfaced script errors. The standard runtime had no diagnostic hooks.
+
+| Phase, seconds | Original samples | Optimized samples | Median reduction |
+| --- | --- | --- | --- |
+| Widget observed | 4.878 / 4.630 / 4.763 | 4.313 / 4.095 / 4.050 | 14.0% |
+| Token observed | 13.268 / 13.904 / 13.310 | 11.154 / 11.615 / 11.322 | 14.9% |
+| Backend verified | 15.312 / 15.388 / 14.893 | 12.159 / 13.517 / 12.362 | 19.3% |
+
+Token medians are 13.310 and 11.322 s; verification medians are 15.312 and
+12.362 s. Timing boundaries are the same as above. Three attempts per version
+remain a small sample. An additional diagnostic run took 17.838 s despite
+observing its token at 11.557 s: the backend request alone recorded 6.255 s.
+That observation is retained in `artifacts/capskip-deep-final-profile.json`
+and its resource timing report, rather than being attributed to local compute.
+
+The full native suite passes 77 cases and smoke passes. New cases cover
+relation traversal after moves/removals/insertions, GC, cross-document adoption,
+default-style copies, logical versus physical declaration order, per-element
+variables, important declarations, rule deletion/insertion and disabled sheets.
+Windows/macOS native builds were not executed on this host.
+
+Local ignored evidence: `artifacts/capskip-deep-comparison.json` and its six
+referenced reports, `artifacts/capskip-deep-{relations,declarations}-{before,after}.json`,
+`artifacts/capskip-deep-native-tests.log`, `artifacts/capskip-deep-smoke.log`,
+and `artifacts/capskip-deep-stacks.log`. Debugger sampling was used only for
+hotspot identification; its elapsed times are excluded from the comparison.
+
+### Remaining candidates
+
+These are code-review findings for prioritization, not measured speedups:
+
+| Area | Evidence and potential next change |
+| --- | --- |
+| Layout spanning shadow scopes | `web_geometry/box_input.cpp` enables incremental style reuse only when the cached layout has at most one cascade scope. A DOM mutation in a composed tree with multiple scopes takes a fresh style pass. Extending reuse needs complete scope/dependency discovery and tests for new or removed scopes, stylesheet edits, inheritance and `:has()` invalidation. This is the leading structural candidate after the measured traversal improvements. |
+| Stylesheet fingerprints | `web_styling/cascade_sources.cpp` recursively hashes every rule's text, even to validate otherwise reusable layout. Mutation-aware sheet/rule revisions could avoid this repeated traversal, provided nested CSSOM edits, media, adopted-sheet order and disabled state all invalidate it. |
+| Single-attempt Python polling | Earlier profiling measured about 0.12 s across all state reads; startup was about 0.05 s. Polling or Context prewarming is therefore a lower priority for single-attempt latency on this host. |
+| Additional network concurrency | The native transport already allows 16 active asynchronous requests and six helper leases per origin. Increasing these limits needs evidence of queueing on the critical path; it does not remove style computation or a slow backend response. |
+| Batch throughput | Two independent Contexts already verified two tasks in 15.178 s versus 31.793 s serially, with 2/2 successes in each batch (`artifacts/capskip-concurrency-comparison.json`). Higher concurrency needs its own CPU, memory and success-rate measurements; it is not a demonstrated reduction in individual challenge latency. |
+
 ## Fixed failures
 
 - The original page initially failed with `could not determine content size
