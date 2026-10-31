@@ -48,6 +48,35 @@ Ignored evidence: `artifacts/main-rebase-live/summary.json` records the commit,
 runtime SHA256 and three reports. Build and validation logs are
 `artifacts/main-rebase-{build,necko,native-tests,smoke}.log`.
 
+## Generic Turnstile solver
+
+2026-11-01, after the upstream rebase. `ruyijs.solve_turnstile(site_url, sitekey)`
+now renders a minimal explicit Turnstile widget under the supplied site URL, waits
+for its callback, supports action/cData and a proxy, clicks an interactive checkbox
+when one is exposed, and returns the token directly. `solve_turnstile_details()`
+also returns elapsed time and attempt count. The Linux Firefox 159 reference
+profile is packaged with the Python module.
+
+The first real NOL login-page check exposed a Next.js/Turbopack timing difference:
+its async `registerChunk` resumed after `await` and read `document.currentScript`,
+which the runtime had already restored to null. Parser and delivered dynamic
+scripts now perform their post-script microtask checkpoint before restoring
+`currentScript`. The NOL page then loads its Turnstile API with no surfaced script
+error.
+
+Three fresh direct NOL solver attempts all returned a 645-character non-dummy token
+on the first attempt: 2.768 s, 2.521 s and 2.911 s (median 2.768 s). A CapSkip
+sitekey control returned a 645-character token in 3.733 s. These runs validate the
+public API but do not submit the tokens to each site's backend; token acceptance
+still depends on supplying the sitekey, hostname, action/cData and proxy expected
+by that site. Evidence without token values is in
+`artifacts/nol-generic-solver.json`.
+
+The same public API was exercised from an isolated installation of the built
+Linux wheel, outside the source checkout and without `PYTHONPATH`, `RUYIJS_SHELL`
+or `LD_LIBRARY_PATH`. It returned a 645-character NOL token in 2.725 s. The full
+native suite now passes 88 cases; smoke, byte compilation and pyflakes pass.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX

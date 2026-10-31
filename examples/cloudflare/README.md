@@ -12,6 +12,40 @@ native 测试、smoke 和 Python 静态检查通过。2026-11-01 连续三次真
 `Success=true`、`Hostname=capskip.com`。这是少量实测样本，不代表固定时延。
 详情见 [变基验证记录](../../native_tests/CLOUDFLARE.md#upstream-030-rebase-validation)。
 
+## 通用 Turnstile Solver
+
+包内提供同步 API，只需要目标站点 URL 和对应 sitekey。`site_url` 必须使用
+该 sitekey 绑定的 hostname；路径和 query 会保留。每次调用默认新建独立
+Context，不复用 cookie、页面或 token。
+
+```python
+from ruyijs import solve_turnstile
+
+token = solve_turnstile(
+    "https://world.nol.com/en/auth-web/login?returnUrl=%2Fen%2Fmy-info",
+    "0x4AAAAAACZ_9sqk3FQppT2B",
+    timeout=90,
+    attempts=3,
+)
+```
+
+如需耗时和尝试次数，使用 `solve_turnstile_details()`；它会返回
+`TurnstileSolution(token, elapsed, attempts)`。支持 `action`、`cdata`、
+`proxy`、自定义 fingerprint，以及 interactive challenge 的 checkbox 点击。
+Turnstile token 是一次性且会过期，取得后应立即提交给目标站点，不要缓存。
+
+命令行接口：
+
+```sh
+PYTHONPATH=python python3 -m ruyijs.turnstile \
+  --direct --timeout 90 --attempts 3 \
+  'https://world.nol.com/en/auth-web/login?returnUrl=%2Fen%2Fmy-info' \
+  '0x4AAAAAACZ_9sqk3FQppT2B'
+```
+
+默认输出只有 token，便于接入 shell 流程；`--json` 额外输出耗时和尝试次数。
+默认使用实测 Linux Firefox 159 指纹；`--profile default` 可改用引擎默认指纹。
+
 以下为变基前各阶段的历史验证记录。
 
 2026-10-31，`dev/linux-next` 的原生 Linux 运行时使用 `--profile linux`
