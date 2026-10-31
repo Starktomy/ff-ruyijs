@@ -98,7 +98,6 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
     std::shared_ptr<ruyijs::domain::styling::RuleIndexStore>* indexes) {
   ruyijs::domain::styling::CssMediaEnvironment environment;
   bool environment_initialized = false, media = false;
-  auto selectors = std::make_shared<SelectorDependencies>();
   State* owner = nullptr;
   uint64_t hash = 1469598103934665603ull;
   if (!VisitCascadeSheets(caller, element, [&](State& state, const SheetCache& cache) {
@@ -111,7 +110,6 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
         MixRules(&hash, cache.rules);
         if (!cache.disabled && !cache.rules.empty() && !media)
           media = !cache.media.text().empty() || HasMedia(cache.rules);
-        if (!cache.disabled) Dependencies(cache.rules, selectors.get());
         return true;
       })) return false;
   if (media) {
@@ -129,8 +127,12 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
       *out = entry.aggregates; *dependencies = entry.dependencies; *indexes = entry.indexes;
       return true;
     }
+  // Selector dependencies are derived from the same rules already covered by
+  // the fingerprint. Reuse them on a hit instead of reparsing every selector.
+  auto selectors = std::make_shared<SelectorDependencies>();
   auto built = std::make_shared<std::vector<ruyijs::domain::styling::StyleSheetAggregate>>();
   if (!VisitCascadeSheets(caller, element, [&](State& state, const SheetCache& cache) {
+        if (!cache.disabled) Dependencies(cache.rules, selectors.get());
         return CurrentRules(state, cache, &environment, &environment_initialized, built.get());
       })) return false;
   if (memo.size() >= 8) memo.erase(memo.begin());
