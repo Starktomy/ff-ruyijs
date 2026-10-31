@@ -15,7 +15,14 @@ class SelectorInput final:public ruyijs::domain::styling::ElementRelations {
   bool ok() const {return ok_;}
   void Target(JS::HandleObject element) {element_=element;}
  private:
-  struct Entry {ruyijs::domain::styling::ElementNode node;document_model::StyleRelationFrame frame;};
+  // Nodes returned by Load are these entries. std::map keeps their addresses
+  // stable; resolved relations (including absent ones) live only for this read
+  // session, so walking the same ancestry does not repeatedly search the map.
+  struct Entry : ruyijs::domain::styling::ElementNode {
+    document_model::StyleRelationFrame frame;
+    mutable const ruyijs::domain::styling::ElementNode* neighbors[4] = {};
+    mutable unsigned resolved = 0;
+  };
   State& state_;
   JS::PersistentRootedObject element_;
   mutable bool ok_=true;
