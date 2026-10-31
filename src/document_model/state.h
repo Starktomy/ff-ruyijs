@@ -221,6 +221,8 @@ struct State {
   void* canvasDimensionsContext = nullptr;
   OffsetGeometryPort offsetGeometry = nullptr;
   void* offsetGeometryContext = nullptr;
+  PointQueryPort pointQuery = nullptr;
+  void* pointQueryContext = nullptr;
   ElementScrollPort elementScroll;
   // Element scroll containers with a queued scroll notification: one per
   // container until it is delivered (scroll events coalesce per task).
@@ -360,6 +362,7 @@ State* FunctionState(const JS::CallArgs&);
 int32_t FunctionSlot(const JS::CallArgs&);
 Wrapper* Receiver(State&, const JS::CallArgs&, NodeKind* = nullptr);
 Wrapper* DocumentReceiver(JSContext*, JS::HandleObject, const JS::CallArgs* args = nullptr);
+bool PointQuery(JSContext*, Wrapper&, double x, double y, bool all, JS::MutableHandleValue);
 bool DocumentImport(JSContext*, unsigned, JS::Value*);
 bool ClearDocument(Wrapper&);
 bool NodeArgument(State&, JS::HandleValue, NodeKey*, bool nullable = false);

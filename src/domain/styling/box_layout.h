@@ -64,4 +64,6 @@ void BoxOverflowExtent(const std::vector<BoxNode>&, const std::vector<BoxLayout>
                        double* right, double* bottom);
 BoxRect ProjectBoxRect(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
                        const BoxViewport&, size_t target);
+bool BoxContainsPoint(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
+                      const BoxViewport&, size_t target, double x, double y);
 }

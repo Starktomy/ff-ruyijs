@@ -145,6 +145,29 @@ its sampled Navigator fields match. The original-page attempt still returns
 observations include unimplemented document point queries, differing layout
 checks, WebGL limits and other probes whose meaning is still being traced.
 
+## Document and shadow point queries
+
+`Document.elementFromPoint` and `elementsFromPoint` returned null/empty for every
+point; the shadow variants threw NotSupportedError. They now ask the existing
+layout owner for painted candidates, honor pointer/visibility, simple stacking
+contexts, scrolling, overflow clipping and inverse 2D transforms, then use the
+original document model to retarget shadow results and remove duplicates.
+Frame queries use their own viewport; hidden frames and detached documents have
+no hits. Root fallback and argument validation follow CSSOM View and local
+Firefox 159 comparisons. Six cases cover these paths, including nested closed
+roots, direct shadow text, GC, z-index containment and changes to styles.
+
+The full native suite passes 59 cases and smoke checks pass. After the last
+shadow-text adjustment the six point cases pass again. The challenge's sampled
+point result is now `[object HTMLBodyElement]`, matching the successful Firefox
+reference instead of null. The original-page live attempt still returns
+`600010` (16.509 s), without a token or backend request.
+
+Hit testing remains bounded by the layout model: full browser painting order,
+3D transforms, SVG path/stroke shapes, masks and complex clipping are not
+implemented. The current clip check uses an ancestor's projected rectangle.
+The caret-position point methods remain pending.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip
