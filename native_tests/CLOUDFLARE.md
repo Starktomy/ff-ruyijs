@@ -1,4 +1,15 @@
-# Development branch: live Turnstile investigation
+# Cloudflare compatibility and performance
+
+Current integration: the fork's `main` carries these changes on top of upstream
+`d32dd74` (0.3.0), using its Linux build, packaging and standalone network
+adapter. The 30 follow-up commits from `dev/linux-next` were rebased without
+reintroducing the superseded Linux port. Font fixes and caching now apply to
+upstream `src/web_geometry/font_posix.cpp`. The old development and PR branches
+remain available as historical references. See [README.md](README.md) for the
+current regression-test setup. Measurements below retain their original
+commit IDs and runtime descriptions.
+
+## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX
 NSS and Neqo adapters. The Linux port PR remains on `linux-native`; these

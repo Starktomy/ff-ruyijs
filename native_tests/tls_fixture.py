@@ -8,7 +8,7 @@ import ssl
 import tempfile
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from h2.config import H2Configuration
 from h2.connection import H2Connection
@@ -102,7 +102,7 @@ class Certificates:
               .add_extension(x509.KeyUsage(False, False, False, False, False, True, True, False, False), True)
               .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), False)
               .sign(key, hashes.SHA256()))
-        leaf_key = rsa.generate_private_key(65537, 2048)
+        leaf_key = ec.generate_private_key(ec.SECP256R1())
         leaf = (x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")]))
                 .issuer_name(subject).public_key(leaf_key.public_key()).serial_number(x509.random_serial_number())
                 .not_valid_before(now - datetime.timedelta(days=1)).not_valid_after(now + datetime.timedelta(days=1))
