@@ -14,6 +14,9 @@ class EvaluationControl:
         Without to_py the original typed snapshot protocol is preserved.
         to_py=False keeps DOM/class/function references; True labels top-level
         references. Ordinary containers become Python values in both modes.
+
+        Host code can inspect cross-origin documents and closed shadow roots.
+        Page functions called by host code retain their own access rules.
         """
         if name is not _TYPED:
             if filename != "<eval>":
