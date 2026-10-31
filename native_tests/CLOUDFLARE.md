@@ -128,6 +128,23 @@ parity is not established for those paths. Buffer contents are captured at
 render entry; source-start acquisition/detachment is still pending. Existing
 non-source filter DSP limitations remain.
 
+## Browser math defaults
+
+The successful Firefox reference and the native shell differed in 13 last-bit
+trigonometric results. Firefox 159 enables fdlibm for sin/cos/tan on non-Windows
+platforms, while the standalone shell defaults to the host libm. Non-Windows
+page/worker realm creation now enables SpiderMonkey's existing fdlibm path,
+including JIT callers. No JavaScript Math members are replaced. Two cases use
+20 donor regression values in the page, iframe and dedicated worker and check
+signed zero/NaN. The full suite passes 53 cases and smoke checks pass.
+
+The challenge's math result array now matches the successful reference exactly.
+The Linux diagnostic profile also uses the actual CPU count (five here), so
+its sampled Navigator fields match. The original-page attempt still returns
+`600010` (17.320 s), without a token or backend verification. Remaining
+observations include unimplemented document point queries, differing layout
+checks, WebGL limits and other probes whose meaning is still being traced.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip
