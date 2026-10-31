@@ -47,6 +47,9 @@ bool CssReceiver(JSContext*, JS::HandleValue, const JSClass*, JS::MutableHandleO
 bool RuleReceiver(JSContext*, JS::HandleValue, JS::MutableHandleObject, bool styleOnly = false,
                     bool conditionOnly = false);
 bool IsRuleObject(JS::HandleObject);
+// Invalidate the owning sheet after a canonical rule mutation, including a
+// nested rule. Detached records have no active sheet to invalidate.
+void InvalidateRules(JS::HandleObject);
 State& ContainerOwnerOf(JS::HandleObject);
 std::vector<std::shared_ptr<SheetRule>>& ContainerRows(JS::HandleObject);
 ruyijs::domain::styling::MediaListValue& ContainerMedia(JS::HandleObject);

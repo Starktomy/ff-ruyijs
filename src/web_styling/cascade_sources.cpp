@@ -15,15 +15,12 @@ void Dependencies(const std::vector<std::shared_ptr<ruyijs::domain::styling::Css
     Dependencies(row->children, out);
   }
 }
-bool HasMedia(const std::vector<std::shared_ptr<ruyijs::domain::styling::CssomRuleValue>>& rows) {
-  for(const auto& row:rows) if(row->kind==4||HasMedia(row->children)) return true;
-  return false;
-}
+const SheetCache::RuleSummary& SummarizeRules(const SheetCache& cache);
 bool CurrentRules(State& state,const SheetCache& cache,
                   ruyijs::domain::styling::CssMediaEnvironment* environment,bool* initialized,
                   std::vector<ruyijs::domain::styling::StyleSheetAggregate>* out) {
   if(cache.disabled||cache.rules.empty()) return true;
-  if(!*initialized&&(!cache.media.text().empty()||HasMedia(cache.rules))) {
+  if(!*initialized&&(!cache.media.text().empty()||SummarizeRules(cache).hasMedia)) {
     if(!ReadConditionEnvironment(state,environment)) return false;
     *initialized=true;
   }
@@ -74,15 +71,28 @@ void Mix(uint64_t* hash, const std::string& text) {
   Mix(hash, &size, sizeof size);
   Mix(hash, text.data(), text.size());
 }
-void MixRules(uint64_t* hash, const std::vector<std::shared_ptr<ruyijs::domain::styling::CssomRuleValue>>& rows) {
+void MixRules(uint64_t* hash, const std::vector<std::shared_ptr<ruyijs::domain::styling::CssomRuleValue>>& rows,
+              bool* media) {
   const uint64_t count = rows.size();
   Mix(hash, &count, sizeof count);
   for (const auto& row : rows) {
     Mix(hash, &row->kind, sizeof row->kind);
-    Mix(hash, row->selector); Mix(hash, row->DeclarationText()); Mix(hash, row->condition);
+    Mix(hash, row->selector);
+    if (row->kind == 6) Mix(hash, row->DeclarationText());
+    else Mix(hash, row->StringDeclarations());
+    Mix(hash, row->condition);
     Mix(hash, row->media.text());
-    MixRules(hash, row->children);
+    *media |= row->kind == 4;
+    MixRules(hash, row->children, media);
   }
+}
+const SheetCache::RuleSummary& SummarizeRules(const SheetCache& cache) {
+  if (!cache.ruleSummary) {
+    SheetCache::RuleSummary summary{1469598103934665603ull, false};
+    MixRules(&summary.hash, cache.rules, &summary.hasMedia);
+    cache.ruleSummary = summary;
+  }
+  return *cache.ruleSummary;
 }
 }  // namespace
 
@@ -107,9 +117,10 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
         Mix(&hash, &cache.key, sizeof cache.key);
         Mix(&hash, cache.href);
         Mix(&hash, cache.media.text());
-        MixRules(&hash, cache.rules);
+        const auto& summary = SummarizeRules(cache);
+        Mix(&hash, &summary.hash, sizeof summary.hash);
         if (!cache.disabled && !cache.rules.empty() && !media)
-          media = !cache.media.text().empty() || HasMedia(cache.rules);
+          media = !cache.media.text().empty() || summary.hasMedia;
         return true;
       })) return false;
   if (media) {
@@ -152,7 +163,8 @@ bool CascadeStamp(State& caller, JS::HandleObject element, uint64_t* stamp) {
     const unsigned char flags = (cache.disabled ? 1 : 0) | (cache.rules.empty() ? 2 : 0);
     Mix(&hash, &flags, 1);
     Mix(&hash, cache.media.text());
-    MixRules(&hash, cache.rules);
+    const auto& summary = SummarizeRules(cache);
+    Mix(&hash, &summary.hash, sizeof summary.hash);
     return true;
   });
   *stamp = hash;

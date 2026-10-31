@@ -39,6 +39,7 @@ bool WriteRuleBlock(State& caller, JS::HandleObject view, JS::HandleValue value)
   auto& row=RuleDataOf(rule);
   if(row.kind==6) row.declarations=css::CssDeclarations(text,css::CssDeclarationContext::Page);
   else row.declarations=row.kind==8?css::CssKeyframeDeclarations(text):css::CssDeclarationText(text);
+  InvalidateRules(rule);
   return true;
 }
 bool SetRuleProperty(State& caller, JS::HandleObject view, const std::string& name,
@@ -58,6 +59,7 @@ bool SetRuleProperty(State& caller, JS::HandleObject view, const std::string& na
   JSAutoRealm realm(cx, RuleOwnerOf(rule).page);
   std::string old = row.kind==6?css::CssPageSet(row.PageDeclarations(),name,text,flag=="important",remove):
     css::CssSetDeclaration(row.StringDeclarations(),name,text,flag=="important",remove);
+  InvalidateRules(rule);
   if (remove) {
     JS::RootedString result(cx, JS_NewStringCopyUTF8N(cx, JS::UTF8Chars(old.data(), old.size())));
     if (!result) return false;
