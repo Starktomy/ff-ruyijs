@@ -26,6 +26,48 @@ The target is the original page at
 Success requires a non-dummy response token and the page's own backend response
 showing `Success=true` and `Hostname=capskip.com`.
 
+## Performance follow-up
+
+On 2026-10-31, compare the saved standard runtime at `1e475a0` with `6336639`
+on the same host, using the command above and a fresh Context for every run.
+The sequence was optimized, original, original, optimized; no page, token or
+transport cache was carried between Contexts. All four runs exited 0 with a
+624-character non-dummy token, one backend verification POST, no surfaced
+script errors, and the original backend's `Success=true`, `Hostname=capskip.com`.
+
+| Observed phase (seconds) | Original runs | Optimized runs | Mean reduction |
+| --- | --- | --- | --- |
+| Widget visible to the host | 6.701 / 6.496 | 4.836 / 4.571 | 28.7% |
+| Token visible to the host | 15.398 / 15.778 | 12.826 / 12.833 | 17.7% |
+| Backend verified, report collected | 16.383 / 17.912 | 14.520 / 14.117 | 16.5% |
+
+These are wall-clock measurements starting before Context construction and
+ending before Context shutdown. Token observation has the example's polling
+resolution. Two runs per version are a small sample; the backend request also
+varied from about one to seven seconds during investigation, independently of
+the local changes. No challenge timer or success condition was changed.
+
+Native stack samples identified repeated Fontconfig family/style matching.
+The Linux adapter now memoizes those matches separately from character-specific
+fallback selection, keeps checking glyph coverage and family visibility, caps
+the new cache at 256 entries, and invalidates it on font profile generation
+changes. An offline sweep of 480 initial code points in regular/italic/bold
+text, including combining marks and emoji, took 3.034 s before and 0.523 s
+after. All 1,461 captured TextMetrics rows and periodic Canvas pixel hashes
+were identical.
+
+The cascade reader also collected selector dependencies before checking its
+existing cache. It now builds those dependencies only on a miss and reuses the
+cached dependencies on a hit. The rule-content fingerprint and invalidation
+rules are unchanged. A local 500-rule, 500-element-style-read sweep took
+0.657 s before and 0.541 s after with identical results. The full 74-case
+native suite and smoke checks pass on the optimized standard build. Native
+Windows/macOS builds were not run here.
+
+Local ignored evidence: `artifacts/capskip-speed-comparison.json`, the four
+referenced live reports, `artifacts/capskip-{font,css}-{before,after}.json`,
+`artifacts/capskip-speed-native-tests.log` and `artifacts/capskip-speed-smoke.log`.
+
 ## Fixed failures
 
 - The original page initially failed with `could not determine content size
