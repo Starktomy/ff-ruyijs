@@ -71,6 +71,21 @@ backend verification. The full suite passes 40 cases, including three new
 font cases, and smoke checks pass. The remaining diagnostics include WebGPU
 exposure and another differing boolean whose meaning is still unknown.
 
+## Linux WebGPU exposure
+
+Firefox 159's `modules/libpref/init/StaticPrefList.yaml` leaves
+`dom.webgpu.enabled` off on Linux release builds, matching the clean Firefox
+reference's absent `GPU` and `navigator.gpu`. Linux now applies that default
+through the existing secure-exposure owner. The existing explicit
+`webgpu.enabled=true` adapter configuration enables the API, and insecure
+origins still remove it. Two local cases verify the default and the opt-in
+across secure/insecure navigation. Other platforms retain their exposure.
+
+The full suite passes 42 cases and smoke checks pass. The original-page live
+attempt still returns `600010` (17.361 s), with no token or backend request.
+The other differing boolean is being traced separately; its meaning is not yet
+established.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip

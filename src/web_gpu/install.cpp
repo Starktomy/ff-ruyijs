@@ -221,7 +221,14 @@ bool Realm::ConfigureExposure() {
   State& s = *state_;
   const JSAutoRealm realm(s.cx, s.kit.page);
   JS::RootedValue secure(s.cx);
-  return JS_GetProperty(s.cx, s.kit.page, "isSecureContext", &secure) && s.secure.Apply(secure.isTrue());
+  if (!JS_GetProperty(s.cx, s.kit.page, "isSecureContext", &secure)) return false;
+  bool exposed = secure.isTrue();
+#if defined(__linux__)
+  // Firefox 159 release leaves dom.webgpu.enabled off on Linux. The existing
+  // explicit adapter opt-in still enables the API for configured profiles.
+  exposed = exposed && s.enabled;
+#endif
+  return s.secure.Apply(exposed);
 }
 
 }  // namespace ruyijs::web_gpu
