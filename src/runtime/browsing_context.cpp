@@ -79,6 +79,8 @@ bool FrameSrcdoc(BrowsingContext& parent, JS::HandleObject element, std::string*
 }
 }
 BrowsingContext::~BrowsingContext() {
+  if (trusted) trusted->SetSecurityPorts(nullptr, nullptr, nullptr);
+  if (document) document->SetTrustedInputPorts({});
   if (security) security->Unbind();
   if(resources)resources->Resources().SetHttpObservation(nullptr,nullptr,nullptr,nullptr);
   if (interaction) interaction->SetInputActivationPort(nullptr, nullptr);
@@ -338,6 +340,17 @@ bool BrowsingContext::Finish(Frames& owner) {
   if (!web_crypto::Install(cx, page, *helpers)) return false;
   trusted = std::make_unique<web_trusted_types::Realm>(cx, page, *helpers);
   if (!trusted->Install()) return false;
+  trusted->SetSecurityPorts([](void* context) {
+    return static_cast<web_security::Realm*>(context)->RequiresTrustedTypes();
+  }, [](void* context, const std::string& name, bool duplicate) {
+    return static_cast<web_security::Realm*>(context)->AllowsTrustedPolicy(name, duplicate);
+  }, security.get());
+  document->SetTrustedInputPorts({[](JS::HandleValue value, int kind) {
+    return web_trusted_types::IsTrustedValue(value, web_trusted_types::Kind(kind));
+  }, [](void* context, JS::HandleValue value, int kind, const char* sink, JS::MutableHandleString output) {
+    return static_cast<web_trusted_types::Realm*>(context)->ConvertInput(
+        value, web_trusted_types::Kind(kind), sink, output);
+  }, trusted.get()});
   geometry = std::make_unique<web_geometry::Realm>(cx, page, *helpers);
   if (!geometry->Install()) return false;
   JS::RootedObject rangePrototype(cx, document->rangePrototype());
