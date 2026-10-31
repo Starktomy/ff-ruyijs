@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "web_audio/compressor.h"
+#include "web_audio/buffer_source.h"
 #include "web_audio/internal.h"
 #include "web_audio/wave_tables.h"
 
@@ -24,6 +25,8 @@ struct RenderNode {
   std::vector<float> output;
   OscillatorVoice voice;
   DynamicsCompressor compressor;
+  bool bufferSource = false;
+  BufferVoice bufferVoice;
 };
 
 // Collects the context's source nodes, every node reachable from them and the

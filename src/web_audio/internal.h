@@ -49,7 +49,7 @@ namespace ruyijs::web_audio {
 // oscillator constructor lives in another translation unit, so the one
 // parameter factory is declared here rather than duplicated per unit.
 bool AttachParams(State& state, JS::HandleObject node, int32_t kind);
-// Appends a source node (an oscillator) to its owning context's node list so
+// Appends a source node to its owning context's node list so
 // startRendering can render it. A node without a context is ignored.
 bool RegisterSourceNode(State& state, JS::HandleObject node);
 // Renders the node graph into the offline buffer, one 128-frame quantum at a

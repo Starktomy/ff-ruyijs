@@ -1,4 +1,5 @@
 #include "web_audio/node_fields.h"
+#include "web_audio/buffer_source.h"
 
 #include "js/Array.h"
 #include "js/Object.h"
@@ -117,6 +118,7 @@ bool NodeCtor(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (!InitNodeChannels(*state, node, kind) || !AttachParams(*state, node, kind))
     return false;
   if (!InitNodeFields(*state, node, args.get(1))) return false;
+  if (index == 14 && !InitBufferSource(*state, node)) return false;
   args.rval().setObject(*node);
   return trace.Finish(true);
 }
@@ -155,6 +157,7 @@ bool MakeNode(JSContext* cx, unsigned argc, JS::Value* vp) {
     return false;
   if (!InitNodeFields(*state, node, JS::UndefinedHandleValue)) return false;
   if (kind == kOscillatorNode && !RegisterSourceNode(*state, node)) return false;
+  if (index == 14 && !InitBufferSource(*state, node)) return false;
   args.rval().setObject(*node);
   return true;
 }
@@ -175,10 +178,13 @@ bool DestinationGet(JSContext* cx, unsigned argc, JS::Value* vp) {
 bool NodeMethod(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   JS::RootedObject self(cx);
-  if (!detail::NodeReceiver(cx, args, WebKit::Slot(args), &self)) return false;
+  const bool stop = WebKit::Slot(args) == 1;
+  State* state = Self(args);
+  if (!detail::NodeReceiver(cx, args, kGenericNode, &self)) return false;
   const int32_t def=JS::GetReservedSlot(self,kNodeDefIndexSlot).toInt32();
   if(JS::GetReservedSlot(self,kNodeKindSlot).toInt32()!=kOscillatorNode && def!=13 && def!=14)
     return WebKit::Fail(cx,"AudioScheduledSourceNode requires a source receiver");
+  if (def == 14 && !BufferSourceAction(*state, args, self, stop)) return false;
   args.rval().setUndefined();
   return true;
 }
