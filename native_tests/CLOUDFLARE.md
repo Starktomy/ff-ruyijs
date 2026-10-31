@@ -94,6 +94,42 @@ A fresh direct NOL request returned a 645-character token on the first attempt i
 evidence without token values is in `artifacts/turnstile-review-live.json`,
 `artifacts/turnstile-review-native-tests.log` and `artifacts/turnstile-review-smoke.log`.
 
+### Public demo validation after review
+
+2026-11-01, runtime/client commit `eee742f`, direct Linux Firefox 159 profile.
+The generic solver used a fresh Context per request, `timeout=20`, `attempts=1`.
+Each token was immediately submitted to the demo's own verification endpoint
+from another fresh native Context. No third-party solving API was used.
+
+| Demo | Backend successes | Median token acquisition | Token lengths |
+| --- | --- | --- | --- |
+| [CapSkip](https://capskip.com/captcha-demo/cloudflare-turnstile/) | 3/3 | 2.746 s | 645 |
+| [ZeroCaptcha non-interactive](https://zerocaptcha.io/captcha-test/cloudflare-turnstile-non-interactive) | 3/3 | 2.963 s | 645 |
+| [ZeroCaptcha action/cData](https://zerocaptcha.io/captcha-test/cloudflare-turnstile-action-cdata) | 3/3 | 2.844 s | 666–688 |
+| [Lusostreams managed](https://turnstiledemo.lusostreams.com/managed) | 3/3 | 2.729 s | 645–666 |
+| [Lusostreams invisible](https://turnstiledemo.lusostreams.com/invisible) | 3/3 | 2.841 s | 645–666 |
+
+All 15 responses reported success with the expected hostname. ZeroCaptcha also
+reported `testSecret=false`; its metadata scenario returned the supplied
+`action=demo_login` and `cdata=demo-session-42`. One separate token per scenario
+was corrupted by changing a character before submission; all five controls were
+rejected with `invalid-input-response`. Three replay controls (CapSkip and both
+ZeroCaptcha scenarios) still reported success, so these demo responses do not
+establish single-use enforcement or reveal any server-side caching.
+
+The current [2Captcha demo](https://2captcha.com/demo/cloudflare-turnstile) uses
+`3x00000000000000000000FF`, while the
+[Cloudflare official demo](https://demo.turnstile.workers.dev/) uses
+`1x00000000000000000000AA`. Both produced 21-character dummy tokens which the
+solver correctly rejected; they are excluded from the real-token success count.
+These are [documented test sitekeys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+NopeCHA's demo returned HTTP 403 even through the native transport, before a
+sitekey could be obtained, so it was not exercised by the solver.
+
+These are small live samples, not a general success-rate or latency guarantee.
+Token acquisition timings exclude backend verification. Evidence without tokens
+or cookie values: `artifacts/turnstile-demo-tests/results.json`.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX
