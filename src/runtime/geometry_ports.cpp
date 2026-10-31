@@ -135,6 +135,18 @@ bool BindGeometryPorts(BrowsingContext& context) {
     return true;
   }, &context);
   context.geometry->SetBoxPorts(boxes);
+  context.styling->SetUsedDimensionsPort([](void* raw, JS::HandleObject element, bool dimensions, double* width,
+                                          double* height, bool* connected, bool* present) {
+    auto& owner=*static_cast<BrowsingContext*>(raw);
+    document_model::LayoutNodeSource node;
+    JS::RootedObject parent(owner.cx);
+    JS::RootedObjectVector children(owner.cx);
+    JS::RootedValue value(owner.cx,JS::ObjectValue(*element));
+    if(!owner.document->ReadLayoutNode(value,&node,&parent,&children)) return false;
+    *connected=node.renderedDocument;*present=false;
+    auto* geometry=static_cast<web_geometry::Realm*>(node.layoutOwner);
+    return !dimensions || !*connected || !geometry || geometry->UsedDimensions(element,width,height,present);
+  }, &context);
   context.document->SetOffsetGeometryPort([](void* raw, JS::HandleObject element,
                                              document_model::OffsetGeometry* out) {
     auto& owner = *static_cast<BrowsingContext*>(raw);

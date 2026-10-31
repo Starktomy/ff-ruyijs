@@ -8,7 +8,7 @@
 
 namespace ruyijs::web_styling::detail {
 namespace css = ruyijs::domain::styling;
-bool ReadViewBlock(JSContext* cx, JS::HandleObject view, std::string* out) {
+bool ReadViewBlock(JSContext* cx, JS::HandleObject view, std::string* out, bool dimensions) {
   JS::RootedObject native(cx);
   native=js::CheckedUnwrapStatic(view);
   if(!native||!OwnsDeclaration(native)) return WebKit::Fail(cx,"Invalid CSS declaration receiver");
@@ -17,6 +17,12 @@ bool ReadViewBlock(JSContext* cx, JS::HandleObject view, std::string* out) {
   if (slot.isObject()) {
     JS::RootedObject rule(cx, &slot.toObject());
     *out = RuleDataOf(rule).DeclarationText(); return true;
+  }
+  const auto& target=JS::GetReservedSlot(native,3);
+  if(target.isObject()) {
+    JS::RootedObject element(cx,&target.toObject());
+    State& state=*static_cast<State*>(JS::GetReservedSlot(native,1).toPrivate());
+    return ReadComputedBlock(state,element,JS::GetReservedSlot(native,4).toBoolean(),dimensions,out);
   }
   const auto& block = JS::GetReservedSlot(native, 0);
   if (!block.isString()) { out->clear(); return true; }

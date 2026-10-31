@@ -72,6 +72,7 @@ class Realm final {
   bool StyleElement(uint64_t document, uint64_t key, document_model::StyleElementAction,
                      bool disabled, JS::MutableHandleValue);
   void SetExceptionPort(bool (*port)(void*, const char*, const char*), void* context);
+  void SetUsedDimensionsPort(bool (*port)(void*, JS::HandleObject, bool, double*, double*, bool*, bool*), void*);
   void SetTaskPort(bool (*port)(void*, JS::HandleObject), void* context);
  private:
   std::unique_ptr<State> state_;

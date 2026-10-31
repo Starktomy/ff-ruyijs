@@ -25,6 +25,7 @@ DataDome 和 Akamai 两种配置均能加载真实 widget 并点击复选框，�
 
 复测已修复未知内容大小的 Zstandard 响应解码、closed shadow root 的宿主检查，
 以及 iframe 点击误用顶层视口和键盘焦点的问题。布局缓存现会验证每个 shadow
-样式作用域，最近一次原页面尝试约 15 秒返回同样失败。31 项 native 测试、
+样式作用域，并已修复 computed style 旧快照和尺寸读取。最近一次原页面尝试约 19 秒
+返回同样失败。34 项 native 测试、
 smoke checks 和三个原有在线示例通过。
 详细记录见 [CLOUDFLARE.md](../../native_tests/CLOUDFLARE.md)。

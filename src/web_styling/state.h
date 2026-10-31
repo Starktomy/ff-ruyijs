@@ -95,6 +95,8 @@ struct State {
   void* adoptedContext = nullptr;
   bool (*exceptionPort)(void*, const char*, const char*) = nullptr;
   void* exceptionContext = nullptr;
+  bool (*usedDimensions)(void*, JS::HandleObject, bool, double*, double*, bool*, bool*) = nullptr;
+  void* usedDimensionsContext = nullptr;
   bool (*postTask)(void*, JS::HandleObject) = nullptr;
   void* taskContext = nullptr;
   StyleLoadPort loadPort = nullptr;
