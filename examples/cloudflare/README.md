@@ -31,8 +31,8 @@ DataDome 和 Akamai 两种配置均能加载真实 widget 并点击复选框，�
 以及 iframe 点击误用顶层视口和键盘焦点的问题。布局缓存现会验证每个 shadow
 样式作用域，并已修复 computed style 旧快照和尺寸读取、媒体 Promise 拒绝、
 Linux `local()` 字体加载、Linux WebGPU 默认暴露、音频缓冲区复制和缓冲音源离线播放，
-以及新 iframe 和导航后的模块配置继承。字体、缓冲音源和数学探测已与成功的独立
-Firefox 对照一致。挑战 iframe 现已使用 Linux WebGL 配置；最近一次原页面尝试
-18.592 秒返回同样失败。65 项 native 测试、
+以及新 iframe 和导航后的模块配置继承、计算样式索引枚举。字体、缓冲音源、数学和
+计算样式 JSON 探测已与成功的独立 Firefox 对照一致。挑战 iframe 现已使用 Linux
+WebGL 配置；最近一次原页面尝试 17.918 秒返回同样失败。69 项 native 测试、
 smoke checks 和三个原有在线示例通过。
 详细记录见 [CLOUDFLARE.md](../../native_tests/CLOUDFLARE.md)。

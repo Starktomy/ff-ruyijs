@@ -68,7 +68,8 @@ bool detail::ReadComputedBlock(State& state, JS::HandleObject element, bool defa
 const JSClass kStyleViewClass = {"CSSStyleDeclaration", JSCLASS_HAS_RESERVED_SLOTS(5)};
 
 bool OwnsDeclaration(JSObject* object) {
-  return JS::GetClass(object)==&kStyleViewClass||JS::GetClass(object)==&kPageDescriptorsClass;
+  return JS::GetClass(object)==&kStyleViewClass||JS::GetClass(object)==&kPageDescriptorsClass||
+         JS::GetClass(object)==&kStyleIndicesClass;
 }
 
 // The style declaration port: Document Model's one CSSStyleDeclaration and
@@ -110,6 +111,18 @@ static bool DispatchDeclaration(State& caller, JSContext* cx, StyleMember member
     return detail::SetRuleProperty(caller, self, property, args.get(0), priority, false, args.rval());
   }
   if(!rule&&member==StyleMember::CssTextGet) return Text(cx,"",args.rval());
+  if (!page && member == StyleMember::Length) {
+    std::vector<std::string> names;
+    if (!DeclarationNames(cx, self, &names)) return false;
+    args.rval().setNumber(double(names.size()));
+    return true;
+  }
+  if (!page && member == StyleMember::Item) {
+    uint32_t index = 0;
+    std::string name;
+    if (!JS::ToUint32(cx, args.get(0), &index) || !DeclarationNameAt(cx, self, index, &name)) return false;
+    return Text(cx, name, args.rval());
+  }
   std::string block, name, value;
   const bool named=member==StyleMember::Value||member==StyleMember::Priority;
   if(named&&!ViewName(cx,args.get(0),&name,page)) return false;
@@ -169,7 +182,7 @@ bool GetComputedStyle(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (!ReadComputed(state, element, &computed)) return false;
   JS::RootedObject view(cx);
   if (!state.NewStyleView("", &view)) return false;
-  JS::SetReservedSlot(view,3,JS::ObjectValue(*element));
+  JS::SetReservedSlot(DeclarationStorage(view),3,JS::ObjectValue(*element));
   args.rval().setObject(*view);
   return true;
 }
@@ -197,8 +210,8 @@ bool GetDefaultComputedStyle(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (!reader.ReadDefault(element, &computed)) return false;
   JS::RootedObject view(cx);
   if (!state.NewStyleView("", &view)) return false;
-  JS::SetReservedSlot(view,3,JS::ObjectValue(*element));
-  JS::SetReservedSlot(view,4,JS::BooleanValue(true));
+  JS::SetReservedSlot(DeclarationStorage(view),3,JS::ObjectValue(*element));
+  JS::SetReservedSlot(DeclarationStorage(view),4,JS::BooleanValue(true));
   args.rval().setObject(*view);
   return true;
 }
