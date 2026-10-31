@@ -11,10 +11,10 @@ namespace ruyijs::interaction { class Realm; }
 namespace ruyijs::font_loading {
 using Native = bool (*)(JSContext* cx, unsigned argc, JS::Value* vp);
 // FontFace keeps every observable in reserved slots: the validated family, the
-// status machine, the binary loadability flag, the cached load() promise and the
-// seven CSS descriptors. No other member owns this state.
+// status machine, the binary loadability flag, local source names, the cached
+// load() promise and seven CSS descriptors. No other member owns this state.
 enum FontFaceSlot {
-  kFontFamily = 0, kFontStatus, kFontLoadable, kFontPromise,
+  kFontFamily = 0, kFontStatus, kFontLoadable, kFontPromise, kFontLocalSources,
   kFontStyle, kFontWeight, kFontStretch, kFontUnicodeRange,
   kFontFeatureSettings, kFontVariant, kFontDisplay, kFontSlotCount
 };
