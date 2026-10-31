@@ -86,9 +86,20 @@ addEventListener('message', e => {
 
 def configure(context, profile):
     context.configure_clock("system")
-    if profile == "datadome":
+    if profile in ("datadome", "linux"):
         example = runpy.run_path(str(EXAMPLES / "DataDome/datadome.py"))
-        context.configure_fingerprint(copy.deepcopy(example["ENVIRONMENT"]))
+        fingerprint = copy.deepcopy(example["ENVIRONMENT"])
+        if profile == "linux":
+            fingerprint["navigator"] = {
+                "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:159.0) Gecko/20100101 Firefox/159.0",
+                "platform": "Linux x86_64", "oscpu": "Linux x86_64", "appVersion": "5.0 (X11)",
+                "language": "en-US", "languages": ["en-US", "en"],
+            }
+            fingerprint["webgl"] = {
+                "vendor": "Mozilla", "renderer": "llvmpipe, or similar",
+                "unmaskedVendor": "Mesa", "unmaskedRenderer": "llvmpipe, or similar",
+            }
+        context.configure_fingerprint(fingerprint)
     elif profile == "akamai":
         example = runpy.run_path(str(EXAMPLES / "akamai/akamai.py"))
         fingerprint = copy.deepcopy(example["PROFILE"])
@@ -175,8 +186,8 @@ def main():
     proxy = parser.add_mutually_exclusive_group()
     proxy.add_argument("--proxy", help="HTTP(S) proxy URL")
     proxy.add_argument("--direct", action="store_true", help="use direct connections")
-    parser.add_argument("--profile", choices=("default", "datadome", "akamai"), default="datadome",
-                        help="reuse an existing example's fingerprint configuration")
+    parser.add_argument("--profile", choices=("default", "datadome", "akamai", "linux"), default="datadome",
+                        help="use an example configuration or the Linux reference environment")
     parser.add_argument("--timeout", type=float, default=180, help="overall attempt budget in seconds")
     parser.add_argument("--output", type=Path, default=Path("cloudflare_result.json"))
     args = parser.parse_args()
