@@ -1,12 +1,13 @@
 #pragma once
 #include "web_styling/cssom.h"
+#include "web_styling/declaration_indices.h"
 #include "document_model/style_port.h"
 #include <string_view>
 namespace ruyijs::web_styling {
 extern const JSClass kPageDescriptorsClass;
 const js::BaseProxyHandler* PageDescriptorsHandler();
 inline JSObject* DeclarationStorage(JSObject* object) {
-  return JS::GetClass(object)==&kPageDescriptorsClass?&js::GetProxyPrivate(object).toObject():object;
+  return (JS::GetClass(object)==&kPageDescriptorsClass||JS::GetClass(object)==&kStyleIndicesClass)?&js::GetProxyPrivate(object).toObject():object;
 }
 inline std::vector<ruyijs::domain::styling::CssDeclarationValue>& PageDeclarationRows(
     JSContext* cx,JS::HandleObject view) {

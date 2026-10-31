@@ -36,12 +36,14 @@ bool ColorProperty(const std::string& name) {
 std::string SerializeCustoms(const css::StyleDeclaration& computed) {
   const void* identity = computed.customs_identity();
   if (!identity) return {};
-  static thread_local const void* cachedIdentity = nullptr;
+  // Keep the shared map alive: a freed map's address can be reused for a
+  // different cascade result, and a raw pointer would then return stale text.
+  static thread_local css::StyleDeclaration cachedCustoms;
   static thread_local std::string cachedText;
-  if (identity != cachedIdentity) {
+  if (identity != cachedCustoms.customs_identity()) {
     std::string text;
     for (const auto& entry : computed.customs()) text += entry.first + ": " + entry.second.value + ";";
-    cachedIdentity = identity;
+    cachedCustoms.inherit_customs(computed);
     cachedText = std::move(text);
   }
   return cachedText;
