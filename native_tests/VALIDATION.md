@@ -6,10 +6,13 @@ Platform: Linux x86_64, Python 3.14, Clang 21 and glibc 2.43. Runtime: Firefox
 
 ## Results
 
-- `python3 -B -m unittest discover -s native_tests -v`: 25 test cases passed.
+- `python3 -B -m unittest discover -s native_tests -v`: 26 test cases passed.
   Three cases invoke isolated suites with 14 further checks: eight TLS/H1/H2/H3,
   three WebTransport and three image-codec checks. These cover real independent
   peers, not mocked network responses.
+- The fragment shader supplied in the maintainer's PR #5 review compiles and
+  links in `test_review_regressions.py`. Review-specific source and scope
+  checks are recorded in [PR5_REVIEW.md](PR5_REVIEW.md).
 - `PYTHONPATH=python python3 -B ci/smoke_test.py`: all checks passed.
 - Pyflakes on the changed Python files and `git diff --check`: passed.
 - `tools/build_linux.py` subsequently found no Ninja work. A subsequent
