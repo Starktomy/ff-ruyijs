@@ -60,11 +60,28 @@ Matrix Transform(const BoxStyle& style, const BoxRect& box) {
   return Multiply(Multiply({1,0,0,1,ox,oy},result),{1,0,0,1,-ox,-oy});
 }
 }
-BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
-                       const BoxViewport& viewport, size_t target) {
+namespace {
+Matrix BoxMatrix(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes, size_t target) {
   Matrix matrix{1,0,0,1,0,0};
   for(size_t i=target;i!=kNoBox;i=nodes[i].parent)
     matrix=Multiply(Transform(nodes[i].style,boxes[i].border),matrix);
+  return matrix;
+}
+}
+bool BoxContainsPoint(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
+                      const BoxViewport& viewport, size_t target, double x, double y) {
+  const auto matrix=BoxMatrix(nodes,boxes,target);
+  const double determinant=matrix[0]*matrix[3]-matrix[1]*matrix[2];
+  if(!std::isfinite(determinant)||determinant==0) return false;
+  x+=viewport.scroll_x-matrix[4];y+=viewport.scroll_y-matrix[5];
+  const double localX=(matrix[3]*x-matrix[2]*y)/determinant;
+  const double localY=(matrix[0]*y-matrix[1]*x)/determinant;
+  const auto& box=boxes[target].border;
+  return localX>=box[0]&&localY>=box[1]&&localX<box[0]+box[2]&&localY<box[1]+box[3];
+}
+BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
+                       const BoxViewport& viewport, size_t target) {
+  const auto matrix=BoxMatrix(nodes,boxes,target);
   const auto& box=boxes[target].border;
   double xs[4],ys[4];
   for(unsigned i=0;i<4;++i) {
