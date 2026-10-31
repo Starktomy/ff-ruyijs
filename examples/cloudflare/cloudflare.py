@@ -94,6 +94,7 @@ def configure(context, profile):
                 "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:159.0) Gecko/20100101 Firefox/159.0",
                 "platform": "Linux x86_64", "oscpu": "Linux x86_64", "appVersion": "5.0 (X11)",
                 "language": "en-US", "languages": ["en-US", "en"],
+                "hardwareConcurrency": os.cpu_count() or 1,
             }
             fingerprint["webgl"] = {
                 "vendor": "Mozilla", "renderer": "llvmpipe, or similar",

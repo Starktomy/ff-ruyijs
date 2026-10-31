@@ -97,6 +97,12 @@ bool WritePageReference(JS::HandleObject page, PageReference slot, JS::HandleVal
 
 JSObject* CreatePage(JSContext* cx, JS::HandleObject sameOrigin) {
   JS::RealmOptions options;
+#ifndef _WIN32
+  // Firefox 159 enables fdlibm for sin/cos/tan on non-Windows platforms; the
+  // standalone shell defaults to the host libm. Keep page and worker realms
+  // on the browser's native math path, including JIT and WebAssembly callers.
+  options.creationOptions().setAlwaysUseFdlibm(true);
+#endif
   if (sameOrigin) options.creationOptions().setExistingCompartment(sameOrigin);
   else options.creationOptions().setNewCompartmentAndZone();
   // As the donor's window globals (XPCJSContext SetPrefableRealmOptions with
