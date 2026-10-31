@@ -3,12 +3,41 @@
 #include "js/PropertyAndElement.h"
 #include "js/Realm.h"
 #include "js/String.h"
+#include "js/Wrapper.h"
 
 namespace ruyijs::browser_environment {
+namespace {
+using BufferedGroup = JS::PersistentRootedObject State::*;
+constexpr BufferedGroup kBufferedGroups[] = {
+    &State::webglGroup, &State::gpuGroup, &State::permissionsGroup,
+    &State::geolocationGroup, &State::speechGroup, &State::mediaGroup};
+
+// Only schema-built profile data is inherited. Native ports, instances and
+// mutable document state are installed separately in each new realm.
+void BufferGroups(State& target, const State& source) {
+  for (auto group : kBufferedGroups) target.*group = (source.*group).get();
+  for (size_t index = 0; index < kOwnerGroupCount; ++index)
+    target.owners[index].group = source.owners[index].group.get();
+}
+bool WrapGroup(JSContext* cx, JS::PersistentRootedObject& buffer) {
+  JS::RootedObject group(cx, buffer);
+  if (group && !JS_WrapObject(cx, &group)) return false;
+  buffer = group;
+  return true;
+}
+bool WrapGroups(State& target) {
+  for (auto group : kBufferedGroups)
+    if (!WrapGroup(target.cx, target.*group)) return false;
+  for (auto& owner : target.owners)
+    if (!WrapGroup(target.cx, owner.group)) return false;
+  return true;
+}
+}  // namespace
 Environment::Environment(JSContext* cx, JS::HandleObject page, Environment& parent,
                          JS::HandleObject frameElement)
     : state_(new State(cx, page)) {
   State* owner = parent.state_;
+  BufferGroups(*state_, *owner);
   state_->shared = owner->shared ? owner->shared : owner;
   state_->topWindow = owner->topWindow;
   state_->parentWindow = owner->page;
@@ -19,17 +48,13 @@ Environment::Environment(JSContext* cx, JS::HandleObject page, Environment& pare
 }
 // A later top-level document of the same traversable: a new Window over the
 // first document's Model. The buffered profile groups are plain data the
-// WebGL/WebGPU/Permissions/Geolocation/Speech owners of the new realm read when they bind.
+// module owners of the new realm read when they bind.
 Environment::Environment(JSContext* cx, JS::HandleObject page, Environment& previous,
                          Succession)
     : state_(new State(cx, page, &previous.state_->model)) {
   State& old = *previous.state_;
   state_->adopted = true;
-  state_->webglGroup = old.webglGroup.get();
-  state_->gpuGroup = old.gpuGroup.get();
-  state_->permissionsGroup = old.permissionsGroup.get();
-  state_->geolocationGroup = old.geolocationGroup.get();
-  state_->speechGroup = old.speechGroup.get();
+  BufferGroups(*state_, old);
   state_->agentClusters = old.agentClusters;
 }
 // HTML "obtain a similar-origin window agent": an origin already in the
@@ -66,6 +91,9 @@ bool State::Inherit() {
     return false;
   }
   JSAutoRealm realm(cx, page);
+  // Initialization can report wrapping failures; constructors only root the
+  // source groups. Every bound module then receives data in its own realm.
+  if (!WrapGroups(*this)) return false;
   JS::RootedObject array(cx, JS::NewArrayObject(cx, list.strings.size()));
   if (!array) return false;
   for (size_t index = 0; index < list.strings.size(); ++index) {
