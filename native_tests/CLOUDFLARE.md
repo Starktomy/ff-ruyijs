@@ -226,6 +226,78 @@ and `smoke.log`. The measurement driver imports the earlier resource probe.
 The result file records the SHA256 of both binaries. Earlier exploratory
 `fonts*`, `stream*`, `alloc-probe*` and profiler files are not the final comparison.
 
+### Native Base64 and Fontconfig optimization
+
+2026-11-01, runtime `2c8b766` compared with the preceding `b4b31f2` build, which
+already includes the mapped-font optimization above. Both versions use the same
+public solver, Linux profile and network settings. This round changes native
+encoding and Linux's derived Skia Fontconfig port:
+
+- `atob` decodes a stable string span into Latin-1, eliminating the stripped
+  UTF-16 copy, decoded UTF-16 copy and deflation pass. Short results use stack
+  scratch space and the engine's nursery/inline allocator; large results take
+  ownership of one native buffer. `btoa` reads the same stable string spans.
+- Fontconfig 2.12.5+ exposes weak/strong family bindings directly. The derived
+  Skia source uses that query in place of allocating temporary patterns, font
+  sets and language sets and running a dummy match per substituted family.
+  Older headers retain the original probe. The donor source stays untouched;
+  source changes regenerate the derived build file.
+
+The final comparison alternated baseline/optimized fresh Contexts with
+`timeout=30`, `attempts=1`, direct networking and no concurrent local tests.
+Serial and two-concurrent CapSkip results use five batches per binary;
+four-concurrent results use three. Values are medians:
+
+| Concurrent solves | CPU seconds per token | Peak tree PSS | Token latency | Batch duration |
+| --- | --- | --- | --- | --- |
+| 1 | 3.471 → 3.241 (−6.6%) | 295 → 291 MiB (−1.5%) | 2.771 → 2.542 s (−8.3%) | 2.771 → 2.543 s |
+| 2 | 3.528 → 3.248 (−7.9%) | 507 → 500 MiB (−1.4%) | 2.928 → 2.684 s (−8.3%) | 3.506 → 2.771 s |
+| 4 | 3.396 → 3.246 (−4.4%) | 968 → 931 MiB (−3.8%) | 3.558 → 3.433 s (−3.5%) | 3.812 → 3.844 s |
+
+Three NOL controls per binary had median CPU 3.623 → 3.283 seconds,
+PSS 308 → 290 MiB and latency 2.777 → 2.561 seconds. Three action/cData
+controls had median CPU 3.135 → 3.215 seconds, PSS 280 → 287 MiB and
+latency 2.719 → 2.639 seconds. The metadata control's CPU and memory rose,
+and four-concurrent batch duration rose 0.8%; this is not an improvement in
+every site/metric combination.
+
+All 33 calls per binary succeeded on their first attempt. Total cgroup CPU
+per successful call across these 66 calls was 3.436 → 3.262 seconds (−5.1%).
+No measured group retained processes after cleanup. CPU covers the caller,
+native runtimes, workers and network helpers, including startup and cleanup.
+PSS/RSS are simultaneous process-tree samples every 50 ms. Initial Python
+imports, backend validation and external sampler CPU are excluded. Sampler
+contention and varying live challenges still limit the precision of these
+small samples. The throughput is from short batches, not sustained load.
+
+An independent native encoding workload (12 decodes of a 4 MiB binary input,
+then one encode; three alternating runs per binary) reduced runtime CPU from
+0.52 to 0.14 seconds, wall time from 0.527 to 0.136 seconds, and runtime peak
+RSS from 124 to 110 MiB. Setup and pre-loop GC are excluded from timing; peak
+RSS is process lifetime. These figures describe that encoding workload,
+not complete Turnstile solves.
+
+All 110 native tests, smoke and pyflakes pass. New regressions cover all byte
+values, large ropes, padding and whitespace, invalid characters, allocation
+boundaries, conversion errors, iframe error brands, Worker decoding and
+Fontconfig preferred/default aliases. The 360-case TextMetrics/RGBA/PNG
+comparison against the baseline remains identical (randomized `deBG` metadata
+excluded). Windows/macOS host builds were not run in this Linux validation.
+
+Fresh optimized tokens passed all five demo backends: CapSkip, ZeroCaptcha
+non-interactive and action/cData, and Lusostreams managed and invisible.
+The action/cData result preserved `demo_login` / `demo-session-42`; the corrupt
+token control was rejected with `invalid-input-response`. NOL controls prove
+token acquisition only. Sanitized responses are in `live-validation.json`.
+
+Evidence without token values is in `artifacts/native-efficiency/`: final
+`results.json` and `final_compare.py` record both runtime hashes; `microbench.py`
+and `microbench.json` record the isolated workload; `render_compare.py` and
+`render-results.json`, `native-tests.log`, `smoke.log` and
+`validation-note.json` record verification. Profiler captures and earlier
+`*probe*`, `adopt-results.json`, `encoding-*` files are diagnostic runs, not
+part of the final comparison. JIT-threshold trials were not promoted.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX
