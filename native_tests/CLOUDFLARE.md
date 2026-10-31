@@ -207,6 +207,29 @@ The original-page attempt still returns `600010` (18.592 s), with no token or
 backend verification. Remaining graphics differences include shader precision,
 range values, internal-format answers and drawing output.
 
+## Computed and rule declaration indices
+
+The VM trace identified `yybGm2` as the digest of
+`JSON.stringify(getComputedStyle(body))` in a newly written iframe. Native
+declarations exposed no own integer keys, producing `{}`. Computed and rule
+declarations now expose live enumerable, read-only indices through a native
+view over their existing store. The computed index table follows Firefox 159's
+393 enabled longhands; inherited custom properties follow those entries, and
+detached elements expose an empty list. Rule edits and ordinary expandos remain
+live. The implementation follows the
+[CSSOM declaration interface](https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface).
+
+The new custom-property test also caught a stale serialization cache: it kept
+only a freed map's address, which could be reused by a different map. The cache
+now retains the shared map, preserving both identity and copy-on-write behavior.
+Four cases cover the independently captured Firefox enumeration, descriptors,
+mutation, custom inheritance, detach/reinsert, GC and cross-realm getters.
+The full suite passes 69 cases and smoke checks pass. Live challenge sampling
+now reports `yybGm2=337715a34605ee5a961ddf597ba26470`, matching the successful
+Firefox reference. The original page still returns `600010` (17.918 s), with no
+token or backend verification. Inline declaration indexing is not changed here;
+the existing computed-value and pseudo-element limitations remain.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip

@@ -64,6 +64,12 @@ JSObject* State::NewStyleView(const std::string& text, JS::MutableHandleObject o
     options.setClass(&kPageDescriptorsClass);
     object=js::NewProxyObject(cx,PageDescriptorsHandler(),storage,pageDescriptors.prototype,options);
     if(!object) return nullptr;
+  } else {
+    JS::RootedValue storage(cx, JS::ObjectValue(*object));
+    js::ProxyOptions options;
+    options.setClass(&kStyleIndicesClass);
+    object = js::NewProxyObject(cx, StyleIndicesHandler(), storage, proto, options);
+    if (!object) return nullptr;
   }
   out.set(object);
   return object;
