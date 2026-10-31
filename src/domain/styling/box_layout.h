@@ -51,6 +51,8 @@ struct BoxLayout {
 // scrollable overflow (scroll) size, at least the scrollport.
 struct BoxScrollport { double client_width = 0, client_height = 0, scroll_width = 0, scroll_height = 0; };
 // Call-scoped projection: no node identity, retained tree, renderer or engine dependency.
+// Replaced inline boxes have used dimensions (unlike ordinary inline text).
+bool BoxReplaced(const BoxNode&);
 bool ComputeBoxLayout(const std::vector<BoxNode>&, const BoxViewport&, std::vector<BoxLayout>*,
                       BoxScrollport* scrollport = nullptr);
 // Whether a box is a scroll container (overflow other than visible/clip on an

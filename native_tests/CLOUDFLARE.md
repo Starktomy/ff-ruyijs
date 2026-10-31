@@ -30,8 +30,14 @@ showing `Success=true` and `Hostname=capskip.com`.
   scope. Unchanged composed trees reuse boxes; changed trees spanning shadow
   scopes still rebuild styles. Nested CSSOM edits, adopted sheets, disabled
   sheets, forced GC and iframe viewport updates have local regressions.
+- Computed style views were snapshots: after changing an element's width from
+  120 px to 240 px, an existing `getComputedStyle()` object still returned
+  120 px. Views now keep a traced element reference, read current styles,
+  resolve width/height using the element's original layout owner and serialize
+  computed `cssText` as empty. Tests cover CSSOM changes, detach/reinsert, GC,
+  box sizing, percentages, transforms and child frames with closed shadow roots.
 
-The full native suite passes 31 cases, including the maintainer's shader
+The full native suite passes 34 cases, including the maintainer's shader
 compile/link regression. The network case includes 11 independent checks;
 the three new decoding checks cover unknown sizes, concatenation, incomplete
 data and quota boundaries. The smoke checks and changed-file Pyflakes pass.
@@ -53,6 +59,18 @@ It still produced no token or backend verification request. A synthetic
 0.367 s for 30 repeated body-rectangle reads before the change and 0.033 s
 afterwards, with identical results. These are one-off local observations,
 not a general benchmark or a successful Turnstile solve.
+
+After the computed-style fix, the final recorded original-page attempt still
+received `600010` in 19.259 s with no token, backend verification request or
+surfaced script error.
+
+A separate Firefox 159 reference launched with a clean profile, no WebDriver
+session and ordinary X11 input completed the original page's challenge. The
+page displayed `Success=true`, `Hostname=capskip.com`, and a 2.9 s solve time.
+This demonstrates that the current network can complete that challenge;
+it is not a successful ruyijs attempt. An earlier reference using a BiDi
+session had `navigator.webdriver=true` and does not establish an ordinary
+browser baseline. Local screenshots are retained in ignored `artifacts/`.
 
 Cloudflare documents `600*` as a generic challenge failure. It does not reveal
 the particular failing check, so this result does not establish that either

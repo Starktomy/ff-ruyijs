@@ -161,6 +161,7 @@ BrowsingContext::~BrowsingContext() {
     workers->SetServiceFactory(nullptr, nullptr);
   }
   if (styling) {
+    styling->SetUsedDimensionsPort(nullptr, nullptr);
     styling->SetLoadPort(nullptr, nullptr);
     styling->SetLoadEventPort(nullptr, nullptr);
     styling->SetTaskPort(nullptr, nullptr);
