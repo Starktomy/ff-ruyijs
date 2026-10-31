@@ -9,7 +9,11 @@ The first successful standard-example run took 17.284 s, received a 624-characte
 non-dummy token and made one verification POST; CapSkip's own backend reported
 `Success=true` and `Hostname=capskip.com`. The command exited 0 with no surfaced
 script errors. This was the original page, using the current repository engine.
-The full native suite passes 74 cases and smoke checks pass.
+A second standard-example run verified again in 16.737 s with the same token
+length and backend success criteria. Its report omits the site's Token display
+row as well as request bodies and cookies. The full native suite passes 74
+cases and smoke checks pass. The existing Akamai, DataDome and CreepJS live
+examples also pass their original success criteria on this runtime.
 
 ```sh
 PYTHONPATH=python python3 -B -m ruyijs.examples cloudflare --direct \
@@ -270,6 +274,10 @@ The full suite passes 74 cases and smoke checks pass. After these changes, the
 standard example on the original CapSkip page returned `status=verified` in
 17.284 s: token length 624, `dummyToken=false`, one backend verification POST,
 `Success=true`, `Hostname=capskip.com`, no surfaced script errors and exit 0.
+The final report-cleanup rerun also verified in 16.737 s with a 624-character
+non-dummy token and one successful backend verification request. Both runs
+completed without needing a checkbox click. This records these two attempts
+on the tested Linux host; Windows/macOS builds were not run here.
 
 ## Earlier live observations
 

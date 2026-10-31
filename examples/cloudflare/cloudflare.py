@@ -31,7 +31,8 @@ STATE = r'''(() => {
     const result = {};
     if (widget) for (const row of widget.querySelectorAll('.captcha-result__row')) {
         const key=row.querySelector('dt'), value=row.querySelector('dd');
-        if (key && value) result[key.textContent.trim()]=value.textContent.trim();
+        if (key && value && key.textContent.trim()!=='Token')
+            result[key.textContent.trim()]=value.textContent.trim();
     }
     function scopes(node, expression) {
         const roots=[{node, expression}];
