@@ -77,6 +77,7 @@ class Realm final {
   void SetBoxPorts(const BoxPorts&);
   bool MeasureElement(JS::HandleObject, std::array<double, 4>*, bool* present, bool content = false);
   bool MeasureOffset(JS::HandleObject, document_model::OffsetGeometry*);
+  bool UsedDimensions(JS::HandleObject, double*, double*, bool* present);
   // An element scroll container's position (box_scroll.cpp): read, or with
   // |write| clamp and store (*changed when it moved). 0,0 for a non-container.
   bool ElementScroll(JS::HandleObject, bool write, double* x, double* y, bool* changed);
