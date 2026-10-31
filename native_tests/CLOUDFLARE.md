@@ -77,6 +77,23 @@ Linux wheel, outside the source checkout and without `PYTHONPATH`, `RUYIJS_SHELL
 or `LD_LIBRARY_PATH`. It returned a 645-character NOL token in 2.725 s. The full
 native suite now passes 88 cases; smoke, byte compilation and pyflakes pass.
 
+### Solver review fixes
+
+2026-11-01: each attempt now applies its remaining budget to setup and runtime
+requests, bounds polling/click waits, and converts startup/RPC timeouts into
+retryable `TurnstileError(code="timeout")`. Cleanup has a separate bounded wait.
+Callback binding preserves metadata strings, and cData accepts only 1–255 ASCII
+letters, digits, underscores or hyphens. Checkbox tracking uses element identity
+and a refresh generation so reused paths and reused nodes can be clicked after
+a refresh. Expiration clears the saved token before another result is returned.
+
+All 10 solver tests pass, including offline native regressions that failed before
+the fixes. The full native suite passes 96 tests; smoke and pyflakes also pass.
+A fresh direct NOL request returned a 645-character token on the first attempt in
+3.797 s. This checks token acquisition only, without backend submission. Ignored
+evidence without token values is in `artifacts/turnstile-review-live.json`,
+`artifacts/turnstile-review-native-tests.log` and `artifacts/turnstile-review-smoke.log`.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX
