@@ -187,6 +187,26 @@ The original-page attempt still returns `600010` (18.629 s), with no token or
 backend verification. Named grid areas/lines and complete grid track sizing
 remain outside this numeric-placement change.
 
+## Profile inheritance into new realms
+
+Configured WebGL values reached only the top-level realm: a newly created
+iframe still reported the default Windows ANGLE renderer and 16 texture units
+under the Linux profile. Child environments now buffer all configured module
+groups from their creator and wrap those data objects during initialization,
+before the new realm's module owners bind. Top-level successor documents also
+retain the previously omitted media and configure-only owner groups. Native
+ports, Window objects and other document state remain local to each realm.
+
+Three regression cases fail on the earlier runtime and pass after the fix.
+They exercise initial and nested blank frames, cross-origin navigation,
+srcdoc WebGL, top-level successors, forced GC and independent realm instances.
+The full suite passes 65 cases and smoke checks pass. Live sampling confirms
+the challenge iframe now reports Mesa/llvmpipe and the configured extension
+lists and most numerical limits match the successful Firefox reference.
+The original-page attempt still returns `600010` (18.592 s), with no token or
+backend verification. Remaining graphics differences include shader precision,
+range values, internal-format answers and drawing output.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip
