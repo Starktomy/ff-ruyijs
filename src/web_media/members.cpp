@@ -1,6 +1,8 @@
 #include "runtime/web_kit.h"
 #include "web_media/state.h"
 #include "web_media/legacy_values.h"
+#include "web_media/media_runtime.h"
+#include "js/GlobalObject.h"
 #include "runtime/runtime.h"
 #include "jsapi.h"
 #include "js/CallAndConstruct.h"
@@ -39,8 +41,9 @@ bool NavigatorMedia(JSContext* cx,unsigned argc,JS::Value* vp) {
 }
 bool MediaMethod(JSContext* cx,unsigned argc,JS::Value* vp) {
   auto args=JS::CallArgsFromVp(argc,vp);auto& s=*static_cast<State*>(WebKit::Owner(args));
-  int op=WebKit::Slot(args);JS::RootedObject self(cx);
-  if (!WebKit::CheckBrand(cx,args,&kMediaClass,&self,"MediaDevices")) return false;
+  int op=WebKit::Slot(args);JS::RootedObject self(cx),caller(cx,JS::CurrentGlobalOrNull(cx));
+  if (!WebKit::CheckBrand(cx,args,&kMediaClass,&self,"MediaDevices"))
+    return RejectMediaException(cx,caller,args.rval());
   if (!op) {
     // The profile's media.devices list (baseline: one audio input with no
     // label, id or group, Firefox's answer before anything is granted).
@@ -60,7 +63,8 @@ bool MediaMethod(JSContext* cx,unsigned argc,JS::Value* vp) {
     JS::RootedObject constraints(cx,&args[0].toObject());
     for (const char* key:{"audio","video"}) {
       JS::RootedValue value(cx);
-      if (!JS_GetProperty(cx,constraints,key,&value)) return false;
+      if (!JS_GetProperty(cx,constraints,key,&value))
+        return RejectMediaException(cx,caller,args.rval());
       requested |= JS::ToBoolean(value);
     }
   }
