@@ -12,8 +12,9 @@ python -m ruyijs.examples cloudflare --direct --profile linux --timeout 180
 
 默认复用 DataDome 示例的环境配置；`--profile akamai` 复用 Akamai 示例的配置，
 并使 User-Agent 与 Firefox 159 TLS 配置一致；`--profile default` 保留引擎默认配置。
-`--profile linux` 复用 DataDome 的屏幕和视口配置，使用 Linux Firefox 159 的
-Navigator 和实测 Mesa/llvmpipe WebGL 标识，供本机软件渲染环境的对照诊断使用。
+`--profile linux` 读取随例子提供的 `linux_firefox159_llvmpipe.json`，包含本机
+Firefox 159 实测的屏幕、视口、Mesa/llvmpipe WebGL 标识、扩展和数值限制；
+CPU 数使用当前主机的值。该配置用于本机软件渲染环境的对照诊断。
 也支持 `--proxy http://127.0.0.1:7890`。当前 Linux 代理路由仍依赖 donor xpcshell，
 只有共享 NSS helper 的安装应使用 `--direct`。
 
@@ -29,8 +30,9 @@ DataDome 和 Akamai 两种配置均能加载真实 widget 并点击复选框，�
 复测已修复未知内容大小的 Zstandard 响应解码、closed shadow root 的宿主检查，
 以及 iframe 点击误用顶层视口和键盘焦点的问题。布局缓存现会验证每个 shadow
 样式作用域，并已修复 computed style 旧快照和尺寸读取、媒体 Promise 拒绝、
-Linux `local()` 字体加载、Linux WebGPU 默认暴露、音频缓冲区复制和缓冲音源离线播放。
-字体和缓冲音源探测已与成功的独立 Firefox 对照一致。Linux 配置最近一次原页面尝试约 20 秒
-返回同样失败。62 项 native 测试、
+Linux `local()` 字体加载、Linux WebGPU 默认暴露、音频缓冲区复制和缓冲音源离线播放，
+以及新 iframe 和导航后的模块配置继承。字体、缓冲音源和数学探测已与成功的独立
+Firefox 对照一致。挑战 iframe 现已使用 Linux WebGL 配置；最近一次原页面尝试
+18.592 秒返回同样失败。65 项 native 测试、
 smoke checks 和三个原有在线示例通过。
 详细记录见 [CLOUDFLARE.md](../../native_tests/CLOUDFLARE.md)。
