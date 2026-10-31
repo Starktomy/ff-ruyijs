@@ -1,3 +1,4 @@
+#include "runtime/native_error.h"
 #include "document_model/state.h"
 #include "jsfriendapi.h"
 #include "js/Conversions.h"
@@ -8,14 +9,7 @@
 #include "js/String.h"
 namespace ruyijs::document_model {
 static bool Error(JSContext* cx, JSExnType type, const char* message) {
-  JS::RootedString text(cx, JS_NewStringCopyZ(cx, message));
-  JS::RootedString file(cx, JS_NewStringCopyZ(cx, "ruyijs:document"));
-  JS::Rooted<mozilla::Maybe<JS::Value>> cause(cx, mozilla::Nothing());
-  JS::RootedValue value(cx);
-  if (!text || !file || !JS::CreateError(cx, type, nullptr, file, 1,
-      JS::ColumnNumberOneOrigin(), nullptr, text, cause, &value)) return false;
-  JS_SetPendingException(cx, value);
-  return false;
+  return ThrowNativeError(cx, type, message);
 }
 bool TypeError(JSContext* cx, const char* message) { return Error(cx, JSEXN_TYPEERR, message); }
 bool RangeError(JSContext* cx, const char* message) { return Error(cx, JSEXN_RANGEERR, message); }
@@ -48,7 +42,14 @@ int32_t FunctionSlot(const JS::CallArgs& args) {
 }
 Wrapper* Receiver(State& state, const JS::CallArgs& args, NodeKind* expected) {
   Wrapper* entry = args.thisv().isObject() ? state.Find(&args.thisv().toObject()) : nullptr;
-  if (!entry) { TypeError(state.cx, "Node receiver is incompatible"); return nullptr; }
+  if (!entry) {
+    const char* iface=!expected?"Node":*expected==NodeKind::Document?"Document":
+        *expected==NodeKind::Element?"Element":
+        *expected==NodeKind::DocumentFragment?"DocumentFragment":
+        *expected==NodeKind::Text?"CharacterData":"Node";
+    WebKit::FailBrand(state.cx,args,iface);
+    return nullptr;
+  }
   if (expected) {
     NodeSnapshot snapshot;
     if (!state.Check(state.model.Inspect(entry->key, &snapshot))) return nullptr;

@@ -73,8 +73,13 @@ bool Dispatch(JSContext* cx, unsigned argc, JS::Value* vp) {
   // A same-origin Event from another realm may be dispatched here.
   State* creator = argc && args[0].isObject() ? Owner(cx, &args[0].toObject(), true) : nullptr;
   Event* event = creator ? creator->event(&args[0].toObject()) : nullptr;
-  if (!event || !IsA(event->kind, Iface::Event))
-    return Error(cx, "TypeError", "dispatchEvent requires an Event");
+  if (!event || !IsA(event->kind, Iface::Event)) {
+    std::string name,message;
+    if (!WebKit::MemberName(cx,args,&name)) return false;
+    if(!argc) message="EventTarget."+name+": At least 1 argument required, but only 0 passed";
+    else message="EventTarget."+name+": Argument 1 does not implement interface Event.";
+    return Error(cx,"TypeError",message.c_str());
+  }
   if (event->value.dispatching() || !event->value.initialized()) {
     if (!state->exceptionReporter)
       return Error(cx, "TypeError", "Event exception reporter is not installed");
@@ -123,6 +128,9 @@ bool FireTargetEvent(State& state,JS::HandleObject target,const char* type,bool 
                       JS::Int32Value(static_cast<int32_t>(Kind::Event)));
   if (!InstallTrusted(state, object)) return false;
   auto event = std::make_unique<Event>(cx, object, text, std::move(key), bubbles, cancelable);
+  // A UA value-change input event crosses a shadow boundary; change stays
+  // scoped to its tree. Public dispatchEvent keeps its supplied Event flags.
+  if (std::string(type) == "input") event->value.set_composed(true);
   event->value.mark_trusted();
   event->value.set_time_stamp(state.EventTime());
   Event& entry = *event;

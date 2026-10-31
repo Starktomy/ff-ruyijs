@@ -8,6 +8,8 @@
 #include "domain/interaction/dom_event.h"
 #include "js/Array.h"
 #include "js/Conversions.h"
+#include "js/ForOfIterator.h"
+#include "js/Wrapper.h"
 #include "js/PropertyAndElement.h"
 #include "js/Object.h"
 #include "js/String.h"
@@ -141,6 +143,32 @@ bool InitCustom(JSContext* cx, JS::HandleObject dict, JS::HandleObject object) {
   JS::SetReservedSlot(object, kEventCustomDetail, detail);
   return true;
 }
+bool InitPointerSamples(JSContext* cx, JS::HandleObject dict, JS::HandleObject object,
+                        const char* name, uint32_t slot) {
+  JS::RootedObject array(cx, JS::NewArrayObject(cx, 0));
+  if (!array) return false;
+  JS::SetReservedSlot(object, slot, JS::ObjectValue(*array));
+  JS::RootedValue input(cx);
+  if (!dict || !JS_GetProperty(cx, dict, name, &input)) return !dict;
+  if (input.isUndefined()) return true;
+  if (!input.isObject()) return Error(cx, "TypeError", "Pointer event samples require a sequence");
+  JS::ForOfIterator iterator(cx);
+  if (!iterator.init(input, JS::ForOfIterator::AllowNonIterable)) return false;
+  if (!iterator.valueIsIterable()) return Error(cx, "TypeError", "Pointer event samples require a sequence");
+  JS::RootedValue item(cx);
+  uint32_t index=0;
+  for (;;) {
+    bool done=false;
+    if (!iterator.next(&item, &done)) return false;
+    if (done) return true;
+    JS::RootedObject local(cx, item.isObject() ? js::CheckedUnwrapStatic(&item.toObject()) : nullptr);
+    State* owner=local ? Owner(cx, local, true) : nullptr;
+    Event* sample=owner ? owner->event(local) : nullptr;
+    if (!sample || sample->kind!=Kind::Pointer)
+      return Error(cx, "TypeError", "Pointer event samples require PointerEvent values");
+    if (!JS_DefineElement(cx, array, index++, item, JSPROP_ENUMERATE)) return false;
+  }
+}
 bool InitPointer(JSContext* cx, JS::HandleObject dict, JS::HandleObject object) {
   domain::PointerEventInit init;
   if (dict && (!ReadInitInt(cx, dict, "pointerId", &init.pointer_id) ||
@@ -171,7 +199,9 @@ bool InitPointer(JSContext* cx, JS::HandleObject dict, JS::HandleObject object) 
   else if (init.pointer_type == "pen") input_source = 2;
   else if (init.pointer_type == "touch") input_source = 5;
   SetSlotInt(object, kEventInputSource, input_source);
-  return SetSlotText(cx, object, kEventPointerType, init.pointer_type);
+  return SetSlotText(cx, object, kEventPointerType, init.pointer_type) &&
+         InitPointerSamples(cx, dict, object, "coalescedEvents", kEventCoalesced) &&
+         InitPointerSamples(cx, dict, object, "predictedEvents", kEventPredicted);
 }
 bool InitWheel(JSContext* cx, JS::HandleObject dict, JS::HandleObject object) {
   domain::WheelEventInit init;

@@ -55,7 +55,13 @@ static bool Change(JSContext* cx, unsigned argc, JS::Value* vp, bool adding) {
   // and records nothing.
   state->Observe("EventTarget", adding ? "addEventListener" : "removeEventListener",
                  int(ApiAccess::Call));
-  if (argc < 2) return Error(cx, "TypeError", "Event listener requires type and callback");
+  if (argc < 2) {
+    std::string name,message;
+    if (!WebKit::MemberName(cx,args,&name)) return false;
+    message="EventTarget."+name+": At least 2 arguments required, but only "+
+            std::to_string(argc)+" passed";
+    return Error(cx,"TypeError",message.c_str());
+  }
   JS::RootedString text(cx);
   std::string type;
   if (!Text(cx, args[0], &text, &type)) return false;

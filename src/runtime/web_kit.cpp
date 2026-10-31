@@ -1,3 +1,4 @@
+#include "runtime/native_error.h"
 #include "runtime/web_kit.h"
 #include "runtime/page_helpers.h"
 #include "runtime/runtime.h"
@@ -23,24 +24,13 @@ bool WebKit::Fail(JSContext* cx, const char* message) {
   return FailKind(cx, message, JSEXN_TYPEERR);
 }
 bool WebKit::FailKind(JSContext* cx, const char* message, int16_t kind) {
-  // Messages may quote script input (a URL), which is UTF-8.
-  JS::RootedString text(cx, JS_NewStringCopyUTF8Z(cx, JS::ConstUTF8CharsZ(message, strlen(message))));
-  JS::RootedString file(cx, JS_NewStringCopyZ(cx, "ruyijs:web"));
-  JS::Rooted<mozilla::Maybe<JS::Value>> cause(cx, mozilla::Nothing());
-  JS::RootedValue value(cx);
-  if (!text || !file || !JS::CreateError(cx, JSExnType(kind), nullptr, file, 1,
-      JS::ColumnNumberOneOrigin(), nullptr, text, cause, &value)) return false;
-  JS_SetPendingException(cx, value);
-  return false;
+  return ThrowNativeError(cx, JSExnType(kind), message);
 }
 bool WebKit::BrandText(JSContext* cx, const JS::CallArgs& args, const char* iface,
                        std::string* text) {
   std::string member;
-  JS::RootedFunction function(cx, JS_GetObjectFunction(&args.callee()));
-  JS::RootedString id(cx);
   // JS_GetFunctionId resolves an accessor's lazy "get "/"set " prefix.
-  if (function && (!JS_GetFunctionId(cx, function, &id) || (id && !ToUTF8(cx, id, &member))))
-    return false;
+  if (!MemberName(cx, args, &member)) return false;
   *text = "'" + member + "' called on an object that does not implement interface " + iface + ".";
   return true;
 }
@@ -56,6 +46,13 @@ void* WebKit::Owner(const JS::CallArgs& args) {
 }
 int32_t WebKit::Slot(const JS::CallArgs& args) {
   return js::GetFunctionNativeReserved(&args.callee(), 1).toInt32();
+}
+bool WebKit::MemberName(JSContext* cx, const JS::CallArgs& args,
+                        std::string* name) {
+  JS::RootedFunction function(cx, JS_GetObjectFunction(&args.callee()));
+  JS::RootedString id(cx);
+  return function && JS_GetFunctionId(cx, function, &id) &&
+         (!id || ToUTF8(cx, id, name));
 }
 bool WebKit::Check(JSContext* cx, JS::HandleValue self, const JSClass* clasp,
                    JS::MutableHandleObject out, const char* message) {

@@ -17,7 +17,6 @@ double BoxLength(const BoxStyle&, const char*, double percent, double fallback);
 // viewport; *out is unset (false) for any other value.
 bool BoxViewportLength(const std::string& text, double width, double height, double* out);
 double BoxLimit(const BoxStyle&, bool width, double available, double value, double extras);
-bool BoxReplaced(const BoxNode&);
 bool BoxAbsolute(const BoxNode&);
 void BoxEdges(const BoxNode&, double width, BoxLayout*);
 struct BoxFlow {
@@ -34,6 +33,7 @@ struct BoxFlow {
   double Intrinsic(size_t, bool minimum, unsigned depth);
   double IntrinsicOuter(size_t, bool minimum, unsigned depth);
   double IntrinsicContent(size_t, bool minimum, unsigned depth);  // Ignoring its own width.
+  double GridIntrinsic(size_t, bool minimum, unsigned depth);
   void ShiftBoxes(size_t, double dx, double dy);
   // Per node for one ComputeBoxLayout call: a flex item's resolved content-box
   // width/height (NaN: from its style), and memoized intrinsic widths.

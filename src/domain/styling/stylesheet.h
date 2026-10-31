@@ -842,7 +842,8 @@ private:
             {"flex-grow", "0"}, {"flex-shrink", "1"}, {"flex-basis", "auto"},
             {"flex-direction", "row"}, {"flex-wrap", "nowrap"}, {"order", "0"},
             {"align-items", "normal"}, {"align-self", "auto"}, {"align-content", "normal"},
-            {"justify-content", "normal"}, {"row-gap", "normal"}, {"column-gap", "normal"}};
+            {"justify-content", "normal"}, {"justify-items", "normal"}, {"justify-self", "auto"},
+            {"row-gap", "normal"}, {"column-gap", "normal"}};
           for (const auto& font : CssFontDefaults()) values.try_emplace(font.name, font.value);
           return values;
         }();

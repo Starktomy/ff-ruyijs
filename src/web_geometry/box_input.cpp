@@ -241,6 +241,22 @@ bool Realm::MeasureElement(JS::HandleObject element, std::array<double,4>* out, 
   if(!LayoutFor(*state_,element,&layout,&found,&viewport)) return false;
   return !layout||found==size_t(-1)||Result(*state_,*layout,found,viewport,content,out,present);
 }
+bool Realm::UsedDimensions(JS::HandleObject element,double* width,double* height,bool* present) {
+  *present=false;
+  std::shared_ptr<const LayoutCache> cache;size_t found=size_t(-1);box::BoxViewport viewport;
+  if(!LayoutFor(*state_,element,&cache,&found,&viewport)) return false;
+  if(!cache||found==size_t(-1)||!cache->layout[found].present) return true;
+  const auto& node=cache->nodes[found];
+  const auto parentDisplay=node.parent==size_t(-1)?std::string():cache->nodes[node.parent].style.Get("display");
+  const bool item=parentDisplay.find("flex")!=std::string::npos||parentDisplay.find("grid")!=std::string::npos;
+  const auto position=node.style.Get("position");
+  if(node.style.Get("display")=="inline"&&!box::BoxReplaced(node)&&!item&&position!="absolute"&&position!="fixed") {
+    return true;
+  }
+  const auto& bounds=cache->layout[found];
+  const auto& rect=node.style.Get("box-sizing")=="border-box"?bounds.border:bounds.content;
+  *width=rect[2];*height=rect[3];*present=true;return true;
+}
 bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutCache>* out, size_t* index,
                box::BoxViewport* viewport_out) {
   out->reset(); *index=size_t(-1);
@@ -314,6 +330,17 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
     s.layoutCache=cache;
   }
   *out=cache; *index=found;
+  return true;
+}
+bool Realm::PaddingPoint(JS::HandleObject element, double* x, double* y) {
+  std::shared_ptr<const LayoutCache> layout; size_t found=size_t(-1); box::BoxViewport viewport;
+  if (!LayoutFor(*state_,element,&layout,&found,&viewport)) return false;
+  if (layout && found!=size_t(-1) && layout->layout[found].present) {
+    const auto scroll=AncestorScroll(*state_,*layout,found);
+    viewport.scroll_x+=scroll[0]; viewport.scroll_y+=scroll[1];
+    if (box::BoxPaddingPoint(layout->nodes,layout->layout,viewport,found,x,y)) return true;
+  }
+  *x=*y=0;
   return true;
 }
 bool Realm::MeasureOffset(JS::HandleObject element, document_model::OffsetGeometry* out) {

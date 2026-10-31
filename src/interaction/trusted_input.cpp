@@ -20,7 +20,7 @@ bool Among(const char* type, std::initializer_list<const char*> names) {
   return false;
 }
 bool Lookup(const char* type, Family* family) {
-  if (Among(type, {"pointerdown", "pointermove", "pointerup", "pointercancel", "pointerover",
+  if (Among(type, {"pointerdown", "pointerrawupdate", "pointermove", "pointerup", "pointercancel", "pointerover",
                    "pointerout", "pointerenter", "pointerleave", "click", "auxclick", "contextmenu"}))
     *family = {Iface::Pointer, Kind::Pointer, "PointerEvent"};
   else if (Among(type, {"mousedown", "mousemove", "mouseup", "dblclick", "mouseover",

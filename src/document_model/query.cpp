@@ -4,6 +4,7 @@
 #include "js/Object.h"
 #include "js/PropertyAndElement.h"
 #include "js/Realm.h"
+#include "js/Wrapper.h"
 
 namespace ruyijs::document_model {
 enum ElementField { Children, ChildCount, FirstElement, LastElement, NextElement,
@@ -12,7 +13,8 @@ enum QueryOperation { QueryOne, QueryAll, ByTag, ByClass, ByName, ByTagNS };
 
 static bool FragmentId(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  auto* entry = NodeReceiver(cx, args.thisv(), NodeKind::DocumentFragment);
+  auto* entry = NodeReceiver(cx, args.thisv(), NodeKind::DocumentFragment, args,
+                             "DocumentFragment");
   if (!entry) return false;
   if (!argc || !args[0].isString()) return TypeError(cx, "getElementById requires a string");
   DomString value;
@@ -88,7 +90,8 @@ static bool ElementGet(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   const int slot = FunctionSlot(args);
   NodeKind kind = slot >= 100 ? NodeKind::Text : NodeKind::Element;
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), kind);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), kind, args,
+      kind==NodeKind::Document?"Document":"DocumentFragment");
   if (!entry) return false;
   State& state = *entry->owner;
   const ElementField field = ElementField(slot % 100);
@@ -154,7 +157,8 @@ static bool FragmentGet(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   const int slot = FunctionSlot(args);
   NodeKind kind = slot >= 100 ? NodeKind::Document : NodeKind::DocumentFragment;
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), kind);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), kind, args,
+                                kind==NodeKind::Document ? "Document" : "DocumentFragment");
   if (!entry) return false;
   State& state = *entry->owner;
   const ElementField field = ElementField(slot % 100);
@@ -173,15 +177,21 @@ static bool FragmentGet(JSContext* cx, unsigned argc, JS::Value* vp) {
 
 static bool QueryCall(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
+  const int encoded=FunctionSlot(args);
+  const char* declared=encoded>=3000?"DocumentFragment":encoded>=2000?"Document":
+                       encoded>=1000?"Element":"Document";
+  const QueryOperation op=QueryOperation(encoded%1000);
   Wrapper* entry = NodeReceiver(cx, args.thisv());
-  if (!entry) return false;
+  if (!entry) {
+    JS_ClearPendingException(cx);
+    return WebKit::FailBrand(cx,args,declared);
+  }
   NodeSnapshot self;
   if (!entry->owner->Check(entry->owner->model.Inspect(entry->key, &self))) return false;
   const bool document = self.kind == NodeKind::Document;
   const bool parent = document || self.kind == NodeKind::Element ||
       self.kind == NodeKind::DocumentFragment;
-  if (!parent) return TypeError(cx, "DOM query receiver is incompatible");
-  const QueryOperation op = QueryOperation(FunctionSlot(args));
+  if (!parent) return WebKit::FailBrand(cx,args,declared);
   if (op == ByName && !document) return TypeError(cx, "getElementsByName is a Document member");
   if (op == ByTagNS) {
     DomString namespace_uri, local;
@@ -233,24 +243,24 @@ bool InstallQuery(State& state) {
       state.Accessor("Document", "lastElementChild", FragmentGet, 100 + LastElement) &&
       state.Accessor("Element", "classList", ElementGet, ClassList) &&
       state.Accessor("Element", "attributes", ElementGet, Attributes) &&
-      state.Method("Element", "querySelector", QueryCall, 1, QueryOne) &&
-      state.Method("Element", "querySelectorAll", QueryCall, 1, QueryAll) &&
-      state.Method("Element", "getElementsByTagName", QueryCall, 1, ByTag) &&
-      state.Method("Element", "getElementsByClassName", QueryCall, 1, ByClass) &&
-      state.Method("Element", "getElementsByTagNameNS", QueryCall, 2, ByTagNS) &&
-      state.Method("Document", "querySelector", QueryCall, 1, QueryOne) &&
-      state.Method("Document", "querySelectorAll", QueryCall, 1, QueryAll) &&
-      state.Method("Document", "getElementsByTagName", QueryCall, 1, ByTag) &&
-      state.Method("Document", "getElementsByClassName", QueryCall, 1, ByClass) &&
-      state.Method("Document", "getElementsByName", QueryCall, 1, ByName) &&
+      state.Method("Element", "querySelector", QueryCall, 1, 1000+QueryOne) &&
+      state.Method("Element", "querySelectorAll", QueryCall, 1, 1000+QueryAll) &&
+      state.Method("Element", "getElementsByTagName", QueryCall, 1, 1000+ByTag) &&
+      state.Method("Element", "getElementsByClassName", QueryCall, 1, 1000+ByClass) &&
+      state.Method("Element", "getElementsByTagNameNS", QueryCall, 2, 1000+ByTagNS) &&
+      state.Method("Document", "querySelector", QueryCall, 1, 2000+QueryOne) &&
+      state.Method("Document", "querySelectorAll", QueryCall, 1, 2000+QueryAll) &&
+      state.Method("Document", "getElementsByTagName", QueryCall, 1, 2000+ByTag) &&
+      state.Method("Document", "getElementsByClassName", QueryCall, 1, 2000+ByClass) &&
+      state.Method("Document", "getElementsByName", QueryCall, 1, 2000+ByName) &&
       state.Method("Document", "getElementsByTagNameNS", DocumentNamespace, 2, 0) &&
       state.Method("DocumentFragment", "getElementById", FragmentId, 1, 0) &&
       state.Accessor("DocumentFragment", "children", FragmentGet, Children) &&
       state.Accessor("DocumentFragment", "childElementCount", FragmentGet, ChildCount) &&
       state.Accessor("DocumentFragment", "firstElementChild", FragmentGet, FirstElement) &&
       state.Accessor("DocumentFragment", "lastElementChild", FragmentGet, LastElement) &&
-      state.Method("DocumentFragment", "querySelector", QueryCall, 1, QueryOne) &&
-      state.Method("DocumentFragment", "querySelectorAll", QueryCall, 1, QueryAll) &&
+      state.Method("DocumentFragment", "querySelector", QueryCall, 1, 3000+QueryOne) &&
+      state.Method("DocumentFragment", "querySelectorAll", QueryCall, 1, 3000+QueryAll) &&
       state.Accessor("Document", "forms", DocumentGet, Forms) &&
       state.Accessor("Document", "images", DocumentGet, Images) &&
       state.Accessor("Document", "links", DocumentGet, Links) &&

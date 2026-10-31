@@ -219,6 +219,8 @@ struct State {
   void* imageLoadContext = nullptr;
   CanvasDimensionPort canvasDimensions = nullptr;
   void* canvasDimensionsContext = nullptr;
+  PointQueryPort pointQuery = nullptr;
+  void* pointQueryContext = nullptr;
   OffsetGeometryPort offsetGeometry = nullptr;
   void* offsetGeometryContext = nullptr;
   ElementScrollPort elementScroll;
@@ -341,13 +343,16 @@ bool CacheShadowNode(State&, const NodeSnapshot&, JS::HandleObject);
 bool RefreshShadowScope(State&, NodeKey, JS::HandleObject);
 Wrapper* NodeReceiver(JSContext*, JS::HandleValue, const JS::CallArgs* args = nullptr);
 Wrapper* NodeReceiver(JSContext*, JS::HandleValue, NodeKind);
+Wrapper* NodeReceiver(JSContext*, JS::HandleValue, NodeKind, const JS::CallArgs&,
+                      const char* iface = nullptr);
 bool InstallDocumentType(State&);
 bool CreateDocumentType(JSContext*, unsigned, JS::Value*);
 bool CreateXMLDocument(JSContext*, unsigned, JS::Value*);
 bool PublicDocumentString(JSContext*, JS::HandleValue, DomString*);
 bool ParsedDocumentTypeGetter(JSContext*, unsigned, JS::Value*);
 bool CacheParsedDocumentType(State&, NodeKey, NodeKind, JS::HandleObject);
-Wrapper* ElementReceiver(JSContext*, JS::HandleValue);
+Wrapper* ElementReceiver(JSContext*, JS::HandleValue,
+                         const JS::CallArgs* args = nullptr);
 bool InstallElementHTML(State&);
 bool InstallDocumentNodes(State&);
 bool Same(NodeKey, NodeKey);
@@ -395,6 +400,7 @@ bool InstallForeignElementMembers(State&);
 bool InstallAnimatedString(State&);
 bool AnimatedClassObject(Wrapper&, JS::MutableHandleValue);
 bool InstallDocumentCreateEvent(State&);
+bool QueryPoint(JSContext*, Wrapper&, double x, double y, bool multiple, JS::MutableHandleValue);
 bool InstallDocumentView(State&);
 bool InstallDocumentStream(State&);
 bool InstallDocumentMetadata(State&);

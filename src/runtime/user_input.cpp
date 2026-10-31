@@ -11,6 +11,7 @@
 #include "runtime/scheduling_control.h"
 #include "runtime/top_level.h"
 #include "document_model/realm.h"
+#include "document_model/checkbox_activation.h"
 #include "interaction/realm.h"
 #include "web_geometry/realm.h"
 #include "jsapi.h"
@@ -76,8 +77,15 @@ bool Click(JSContext* cx, BrowsingContext& active, JS::HandleObject target, doub
   if (pointerAllowed && mouseAllowed && !document_model::PointerFocus(cx, target)) return false;
   clock.Pass(hold);
   if (!Pointer(cx, target, "pointerup", x, y, 0, 0, true, clock) ||
-      (pointerAllowed && !Mouse(cx, target, "mouseup", x, y, 0, 1, true, clock)) ||
-      !Pointer(cx, target, "click", x, y, 0, 0, true, clock, &clickAllowed)) return false;
+      (pointerAllowed && !Mouse(cx, target, "mouseup", x, y, 0, 1, true, clock))) return false;
+  document_model::CheckboxClickState saved;
+  if (!document_model::BeginCheckboxClick(cx, target, &saved)) return false;
+  if (!Pointer(cx, target, "click", x, y, 0, 0, true, clock, &clickAllowed)) {
+    JS::AutoSaveExceptionState exception(cx);
+    document_model::EndCheckboxClick(cx, target, saved, false);
+    return false;
+  }
+  if (!document_model::EndCheckboxClick(cx, target, saved, clickAllowed)) return false;
   return !clickAllowed || document_model::Activate(cx, target);
 }
 bool Delay(JSContext* cx, JS::HandleObject request, const char* name, double* value) {

@@ -4,6 +4,7 @@
 #include "document_model/html_element_internal.h"
 #include "document_model/style_internal.h"
 #include "document_model/form_submission.h"
+#include "document_model/checkbox_activation.h"
 #include "interaction/realm.h"
 #include "js/CallAndConstruct.h"
 #include "js/PropertyAndElement.h"
@@ -72,8 +73,15 @@ bool ClickElement(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (disabled || entry->clickInProgress) return true;
   struct Guard { bool& flag; ~Guard() { flag = false; } } guard{entry->clickInProgress};
   entry->clickInProgress = true;
+  CheckboxClickState saved;
+  if (!BeginCheckboxClick(cx, element, &saved)) return false;
   bool allowed;
-  if (!state.interaction.FireClick(element, &allowed)) return false;
+  if (!state.interaction.FireClick(element, &allowed)) {
+    JS::AutoSaveExceptionState exception(cx);
+    EndCheckboxClick(cx, element, saved, false);
+    return false;
+  }
+  if (!EndCheckboxClick(cx, element, saved, allowed)) return false;
   return !allowed || ActivateFormControl(*entry);
 }
 bool InertElement(JSContext* cx, unsigned argc, JS::Value* vp) {

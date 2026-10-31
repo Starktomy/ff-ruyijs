@@ -20,6 +20,7 @@ struct ElementNode {
   const ElementRelations* relations=nullptr;
   uint64_t document=0,key=0;
   bool root=false,empty=true,html=true,focused=false;
+  bool checked=false,indeterminate=false;
   bool has_class(const std::string& name) const {
     return std::find(classes.begin(),classes.end(),name)!=classes.end();
   }

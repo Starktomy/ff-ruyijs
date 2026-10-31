@@ -27,6 +27,7 @@ struct StyleRelationFrame {
   StyleFrame value;
   StyleIdentity identity,parent,previous,next,first;
   bool root=false,empty=true,html=true,focused=false;
+  bool checked=false,indeterminate=false;
 };
 using StyleRelationPort=bool (*)(void*,JS::HandleObject,uint64_t,uint64_t,StyleRelationFrame*);
 

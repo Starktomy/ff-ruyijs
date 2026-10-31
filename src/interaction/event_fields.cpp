@@ -12,6 +12,8 @@
 #include "js/PropertyAndElement.h"
 #include "js/Object.h"
 #include "js/String.h"
+#include "js/Realm.h"
+#include "js/Wrapper.h"
 #include <string>
 
 namespace ruyijs::interaction {
@@ -274,22 +276,78 @@ bool GetMouseModifierState(JSContext* cx, unsigned argc, JS::Value* vp) {
   return ModifierState(cx, JS::CallArgsFromVp(argc, vp), "getModifierState",
                        Iface::Mouse);
 }
-bool GetCoalescedEvents(JSContext* cx, unsigned argc, JS::Value* vp) {
-  auto args = JS::CallArgsFromVp(argc, vp);
-  Event* event = Receiver(cx, args, Iface::Pointer);
+namespace {
+bool PointerSamples(JSContext* cx, const JS::CallArgs& args, uint32_t slot, const char* name) {
+  Event* event=Receiver(cx,args,Iface::Pointer,true);
   if (!event) return false;
-  ReportEventAccess(cx, event, "PointerEvent", "getCoalescedEvents",
-                    int(ApiAccess::Call));
-  JS::RootedObject array(cx, JS::NewArrayObject(cx, 0));
-  if (!array) return false;
-  JS::RootedValue self(cx, JS::ObjectValue(*Self(args)));
-  if (!JS_DefineElement(cx, array, 0, self, JSPROP_ENUMERATE)) return false;
-  args.rval().setObject(*array);
+  ReportEventAccess(cx,event,"PointerEvent",name,int(ApiAccess::Call));
+  State& owner=*Owner(cx,event->object,true);
+  JS::RootedObject result(cx,JS::NewArrayObject(cx,0));
+  if (!result) return false;
+  JS::RootedObject samples(cx);
+  {
+    JSAutoRealm realm(cx,owner.page);
+    samples=&JS::GetReservedSlot(event->object,slot).toObject();
+    uint32_t length=0;
+    if (!JS::GetArrayLength(cx,samples,&length)) return false;
+    const auto type=event->value.type().value();
+    const bool move=type==std::string_view(reinterpret_cast<const char*>(u"pointermove"),22) ||
+      type==std::string_view(reinterpret_cast<const char*>(u"pointerrawupdate"),32);
+    // Gecko fills a single independent sample only for trusted pointer motion.
+    if (slot==kEventCoalesced && length==0 && move && event->value.is_trusted() && !event->pointerSample) {
+      if (owner.events.size()>=100000) return Error(cx,"RangeError","Event limit exceeded");
+      JS::RootedObject clone(cx,JS_NewObjectWithGivenProto(cx,&kEventClass,owner.pointerPrototype));
+      if (!clone || !InstallTrusted(owner,clone)) return false;
+      for (uint32_t i=0;i<kEventSlotCount;++i)
+        JS::SetReservedSlot(clone,i,JS::GetReservedSlot(event->object,i));
+      for (uint32_t field : {kEventCoalesced,kEventPredicted}) {
+        JS::RootedObject empty(cx,JS::NewArrayObject(cx,0));
+        if (!empty) return false;
+        JS::SetReservedSlot(clone,field,JS::ObjectValue(*empty));
+      }
+      SetSlotInt(clone,kEventUiDetail,0);
+      SetSlotNull(clone,kEventRelatedTarget);
+      auto sample=std::make_unique<Event>(cx,clone,event->type,std::string(type),false,false);
+      sample->kind=Kind::Pointer;
+      sample->pointerSample=true;
+      sample->value.mark_trusted();
+      sample->value.set_composed(true);
+      sample->value.set_time_stamp(event->value.time_stamp());
+      sample->value.set_target_id(event->value.target_id());
+      owner.events.push_back(std::move(sample));
+      JS::RootedValue sampleValue(cx,JS::ObjectValue(*clone));
+      if (!JS_DefineElement(cx,samples,0,sampleValue,JSPROP_ENUMERATE)) return false;
+      length=1;
+    }
+    // Constructor-provided samples retain their own target, unless a trusted
+    // parent supplies one to a sample which has not yet had a target.
+    if (event->value.is_trusted() && event->value.target_id()) {
+      for (uint32_t i=0;i<length;++i) {
+        JS::RootedValue item(cx);
+        if (!JS_GetElement(cx,samples,i,&item)) return false;
+        JS::RootedObject local(cx,js::CheckedUnwrapStatic(&item.toObject()));
+        State* sampleOwner=Owner(cx,local,true);
+        Event* sample=sampleOwner ? sampleOwner->event(local) : nullptr;
+        if (sample && !sample->value.target_id()) sample->value.set_target_id(event->value.target_id());
+      }
+    }
+  }
+  if (!JS_WrapObject(cx,&samples)) return false;
+  uint32_t length=0;
+  if (!JS::GetArrayLength(cx,samples,&length)) return false;
+  for (uint32_t i=0;i<length;++i) {
+    JS::RootedValue item(cx);
+    if (!JS_GetElement(cx,samples,i,&item) || !JS_DefineElement(cx,result,i,item,JSPROP_ENUMERATE)) return false;
+  }
+  args.rval().setObject(*result);
   return true;
 }
+}
+bool GetCoalescedEvents(JSContext* cx, unsigned argc, JS::Value* vp) {
+  return PointerSamples(cx,JS::CallArgsFromVp(argc,vp),kEventCoalesced,"getCoalescedEvents");
+}
 bool GetPredictedEvents(JSContext* cx, unsigned argc, JS::Value* vp) {
-  return EmptyArray(cx, JS::CallArgsFromVp(argc, vp), "getPredictedEvents",
-                    Iface::Pointer);
+  return PointerSamples(cx,JS::CallArgsFromVp(argc,vp),kEventPredicted,"getPredictedEvents");
 }
 bool GetTargetRanges(JSContext* cx, unsigned argc, JS::Value* vp) {
   return EmptyArray(cx, JS::CallArgsFromVp(argc, vp), "getTargetRanges",

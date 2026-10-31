@@ -37,6 +37,7 @@ class Realm final {
   bool Install();
   document_model::StyleDeclarationPort DeclarationPort();
   bool ReadComputed(JS::HandleObject, ComputedStyle*);
+  void SetUsedDimensionsPort(bool (*)(void*, JS::HandleObject, double*, double*, bool*, bool*), void*);
   std::unique_ptr<ComputedStyleReader> BeginComputedRead();
   // A fingerprint of `element`'s cascade input (sheet order, flags, media and
   // rule text); equal fingerprints give equal computed styles for an

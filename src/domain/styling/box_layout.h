@@ -27,6 +27,7 @@ struct BoxNode {
   double attribute_width_percent = -1, attribute_height_percent = -1;
   bool no_frame_border = false;
 };
+bool BoxReplaced(const BoxNode&);
 struct BoxViewport {
   double width = 0, height = 0, scroll_x = 0, scroll_y = 0;
   // The scrollport (initial and fixed containing block): the viewport less the
@@ -60,6 +61,10 @@ bool BoxScrollContainer(const std::vector<BoxNode>&, size_t);
 // descendant that is not itself a scroll container.
 void BoxOverflowExtent(const std::vector<BoxNode>&, const std::vector<BoxLayout>&, size_t index,
                        double* right, double* bottom);
+// Inverse of the same supported CSS transforms, from viewport coordinates to
+// the target's padding edge. A singular transform has no local point.
+bool BoxPaddingPoint(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
+                     const BoxViewport&, size_t target, double* x, double* y);
 BoxRect ProjectBoxRect(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
                        const BoxViewport&, size_t target);
 }

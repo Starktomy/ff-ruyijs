@@ -1,4 +1,5 @@
 #include "document_model/html_control.h"
+#include "document_model/canvas_brand.h"
 #include "js/Object.h"
 #include "js/Realm.h"
 #include "js/Wrapper.h"
@@ -40,5 +41,14 @@ bool IsMediaElementValue(JS::HandleValue value) {
   return node.kind == NodeKind::Element &&
          (!std::strcmp(node.interface_name, "HTMLAudioElement") ||
           !std::strcmp(node.interface_name, "HTMLVideoElement"));
+}
+bool IsCanvasElementValue(JS::HandleValue value) {
+  JSObject* object = value.isObject() ? js::CheckedUnwrapStatic(&value.toObject()) : nullptr;
+  if (!object || JS::GetClass(object) != &kNodeClass) return false;
+  auto* entry = static_cast<Wrapper*>(JS::GetReservedSlot(object, 0).toPrivate());
+  if (!entry || entry->dead || !entry->owner) return false;
+  NodeSnapshot node;
+  if (entry->owner->model.Inspect(entry->key, &node).code != ErrorCode::None) return false;
+  return node.kind == NodeKind::Element && !std::strcmp(node.interface_name, "HTMLCanvasElement");
 }
 }

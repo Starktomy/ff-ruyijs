@@ -20,6 +20,8 @@ using ScriptPort = bool (*)(void*, Realm&, interaction::Realm&,
     browser_environment::Environment&, JS::HandleObject page, JS::HandleObject script, bool external);
 struct GeometryNode;
 struct LayoutNodeSource;
+using PointQueryPort = bool (*)(void*, JS::HandleObject root, double x, double y,
+                                std::vector<NodeKey>*);
 // Runtime ports for an iframe's browsing context. Create assembles the child
 // realm with the shared installers and returns its window and document; it runs
 // at the structural change that connected the element, never at a later
@@ -150,6 +152,7 @@ class Realm final {
   void SetCanvasDimensionPort(CanvasDimensionPort port, void* context);
   // HTMLElement offset* read the layout owner through this port (bound after install).
   void SetOffsetGeometryPort(OffsetGeometryPort port, void* context);
+  void SetPointQueryPort(PointQueryPort port, void* context);
   void SetElementScrollPort(const ElementScrollPort& port);
   // The queued scroll notification of |element| is being delivered.
   void ElementScrollDelivered(JS::HandleObject element);

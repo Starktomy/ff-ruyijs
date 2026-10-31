@@ -121,6 +121,7 @@ enum EventSlot : uint32_t {
   // ExtendableEvent: the waitUntil promises of a trusted dispatched event (an
   // array only on events the Service Worker owner fires).
   kEventLifetimes,
+  kEventCoalesced, kEventPredicted,
   kEventSlotCount
 };
 // One EventTarget record. A realm-created object (`new EventTarget`, Window,
@@ -152,6 +153,7 @@ struct Event {
   JS::PersistentRootedString type;
   domain::DomEvent value;
   Kind kind = Kind::Event;
+  bool pointerSample = false;  // A coalesced sample must not recursively generate samples.
   // Borrowed only from this Event's active stack scope, in root-to-target order.
   PreparedPath* dispatchPath = nullptr;
   Event(JSContext* cx, JS::HandleObject wrapper, JS::HandleString text,
@@ -207,6 +209,8 @@ struct State {
   void* exceptionContext = nullptr;
   ApiMonitorPort apiMonitor = nullptr;
   void* apiMonitorContext = nullptr;
+  bool (*coordinatePort)(void*, JS::HandleObject, bool, double*, double*) = nullptr;
+  void* coordinateContext = nullptr;
   InputActivationPort inputActivation = nullptr;
   void* inputActivationContext = nullptr;
   JS::PersistentRootedObject closeFactory{cx},closeManager{cx};

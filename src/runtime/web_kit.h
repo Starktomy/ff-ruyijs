@@ -38,6 +38,8 @@ class WebKit {
   static bool Reject(JSContext* cx, unsigned argc, JS::Value* vp);
   static void* Owner(const JS::CallArgs& args);
   static int32_t Slot(const JS::CallArgs& args);
+  static bool MemberName(JSContext* cx, const JS::CallArgs& args,
+                         std::string* name);
   // A WebIDL brand failure in Firefox's words: "'<member>' called on an object
   // that does not implement interface <iface>.", the member being the callee's
   // own name with an accessor's "get "/"set " prefix. BrandText only builds it.

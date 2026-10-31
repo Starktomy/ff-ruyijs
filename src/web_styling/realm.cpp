@@ -57,6 +57,8 @@ JSObject* State::NewStyleView(const std::string& text, JS::MutableHandleObject o
   JS::SetReservedSlot(object, 0, JS::StringValue(block));
   JS::SetReservedSlot(object, 1, JS::PrivateValue(this));
   JS::SetReservedSlot(object, 2, rule ? JS::ObjectValue(*rule) : JS::NullValue());
+  JS::SetReservedSlot(object, 3, JS::NullValue());
+  JS::SetReservedSlot(object, 4, JS::BooleanValue(false));
   if(pageView) {
     JS::RootedValue storage(cx,JS::ObjectValue(*object));js::ProxyOptions options;
     options.setClass(&kPageDescriptorsClass);
@@ -90,6 +92,10 @@ void Realm::SetDocumentPorts(document_model::StyleChainPort chain,
   state_->sheetsPort = sheets;
   state_->chainContext = context;
   state_->sheetsContext = context;
+}
+void Realm::SetUsedDimensionsPort(bool (*port)(void*, JS::HandleObject, double*, double*, bool*, bool*), void* context) {
+  state_->usedDimensions=port;
+  state_->usedDimensionsContext=context;
 }
 void Realm::SetExceptionPort(bool (*port)(void*, const char*, const char*), void* context) {
   state_->exceptionPort = port;

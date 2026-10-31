@@ -18,6 +18,12 @@ bool ReadViewBlock(JSContext* cx, JS::HandleObject view, std::string* out) {
     JS::RootedObject rule(cx, &slot.toObject());
     *out = RuleDataOf(rule).DeclarationText(); return true;
   }
+  const auto& element=JS::GetReservedSlot(native,3);
+  if(element.isObject()) {
+    State& state=*static_cast<State*>(JS::GetReservedSlot(native,1).toPrivate());
+    JS::RootedObject target(cx,&element.toObject());
+    return ReadComputedBlock(state,target,JS::GetReservedSlot(native,4).toBoolean(),out);
+  }
   const auto& block = JS::GetReservedSlot(native, 0);
   if (!block.isString()) { out->clear(); return true; }
   JS::RootedString text(cx, block.toString());

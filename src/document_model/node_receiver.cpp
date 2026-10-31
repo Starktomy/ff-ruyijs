@@ -11,7 +11,10 @@ namespace ruyijs::document_model {
 // call args (hence the callee's member name) are available.
 static void NodeBrandFail(JSContext* cx, const JS::CallArgs* args) {
   std::string text;
-  if (args && WebKit::BrandText(cx, *args, "Node", &text)) { TypeError(cx, text.c_str()); return; }
+  if (args && WebKit::BrandText(cx, *args, "Node", &text)) {
+    TypeError(cx, text.c_str());
+    return;
+  }
   TypeError(cx, "Node receiver is incompatible");
 }
 Wrapper* NodeReceiver(JSContext* cx, JS::HandleValue value, const JS::CallArgs* args) {
@@ -34,5 +37,26 @@ Wrapper* NodeReceiver(JSContext* cx, JS::HandleValue value, NodeKind expected) {
   if (node.kind == expected || (expected == NodeKind::Text &&
       (node.kind == NodeKind::Comment || node.kind == NodeKind::ProcessingInstruction))) return entry;
   TypeError(cx, "DOM interface receiver is incompatible"); return nullptr;
+}
+Wrapper* NodeReceiver(JSContext* cx, JS::HandleValue value, NodeKind expected,
+                      const JS::CallArgs& args, const char* iface) {
+  JSObject* object = value.isObject() ? js::CheckedUnwrapStatic(&value.toObject()) : nullptr;
+  auto* entry = object && JS::GetClass(object) == &kNodeClass
+      ? static_cast<Wrapper*>(JS::GetReservedSlot(object, 0).toPrivate()) : nullptr;
+  if (!entry || !entry->owner || entry->dead) {
+    WebKit::FailBrand(cx,args,iface?iface:"Node");
+    return nullptr;
+  }
+  State& owner = *entry->owner;
+  NodeSnapshot node;
+  {
+    JSAutoRealm realm(cx, owner.page);
+    if (!owner.Check(owner.model.Inspect(entry->key, &node))) return nullptr;
+  }
+  if (node.kind == expected || (expected == NodeKind::Text &&
+      (node.kind == NodeKind::Comment || node.kind == NodeKind::ProcessingInstruction)))
+    return entry;
+  WebKit::FailBrand(cx,args,iface?iface:"Node");
+  return nullptr;
 }
 }

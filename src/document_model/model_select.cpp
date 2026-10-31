@@ -6,7 +6,7 @@ Status Model::OptionSelected(NodeKey key, bool* out) const noexcept {
   return Protect([&] { *out = State().element(key).option_selected(); });
 }
 Status Model::SetOptionSelected(NodeKey key, bool value) noexcept {
-  return Protect([&] { State().element(key).set_option_selected(value); });
+  return Protect([&] { State().element(key).set_option_selected(value); State().TouchStyle(); });
 }
 Status Model::OptionText(NodeKey key, DomString* out) const noexcept {
   std::optional<DomString> text;

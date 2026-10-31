@@ -170,11 +170,13 @@ BrowsingContext::~BrowsingContext() {
     styling->SetDocumentListPorts(nullptr, nullptr, nullptr);
     styling->SetAdoptedPorts(nullptr, nullptr, nullptr, nullptr);
     styling->SetExceptionPort(nullptr, nullptr);
+    styling->SetUsedDimensionsPort(nullptr, nullptr);
   }
   if (document) {
     document->SetFormPorts(nullptr, nullptr, nullptr);
     document->SetImageLoadPort(nullptr, nullptr);
     document->SetOffsetGeometryPort(nullptr, nullptr);
+    document->SetPointQueryPort(nullptr, nullptr);
     document->SetElementScrollPort({});
     document->SetMediaKeysCheckPort(nullptr, nullptr);
     document->SetTextTrackPorts({});
@@ -192,6 +194,7 @@ BrowsingContext::~BrowsingContext() {
   interaction->SetReclaimPort(nullptr, nullptr);
   interaction->SetBrandPort(nullptr, nullptr);
   interaction->SetEventClockPort(nullptr, nullptr, nullptr);
+  interaction->SetCoordinatePort(nullptr, nullptr);
 }
 bool BrowsingContext::Begin(BrowsingContext* parent, JS::HandleObject frameElement) {
   helpers = std::make_unique<PageHelpers>(cx, page);

@@ -10,6 +10,7 @@
 #include "domain/styling/css_components.h"
 #include "domain/styling/css_selector.h"
 #include "domain/document_model/character_data.h"
+#include "domain/document_model/control_selector_state.h"
 
 namespace ruyijs::document_model {
 namespace {
@@ -57,6 +58,9 @@ class TreeInput final : public styling::ElementRelations {
     }
     node->root = element->parent_id() == owner_.id();
     node->focused = owner_.focused_id() == id;
+    const auto control = domain::control_selector_state(owner_, id);
+    node->checked = control.checked;
+    node->indeterminate = control.indeterminate;
     return nodes_.emplace(id, std::move(node)).first->second.get();
   }
   const styling::ElementNode* Related(const styling::ElementNode& node, char relation) const override {

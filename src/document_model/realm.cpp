@@ -249,6 +249,9 @@ void Realm::SetMediaKeysCheckPort(MediaKeysCheckPort port, void* context) {
 }
 void Realm::SetTextTrackPorts(TextTrackPorts ports) { state_->textTracks = ports; }
 void Realm::SetStyleDeclarationPort(StyleDeclarationPort port) { state_->styleDeclarations = port; }
+void Realm::SetPointQueryPort(PointQueryPort port, void* context) {
+  state_->pointQuery = port; state_->pointQueryContext = context;
+}
 void Realm::SetOffsetGeometryPort(OffsetGeometryPort port, void* context) {
   state_->offsetGeometry = port;
   state_->offsetGeometryContext = context;

@@ -67,8 +67,15 @@ bool GetUiWhich(JSContext* cx, unsigned argc, JS::Value* vp) {
   Event* event = Receiver(cx, args, Iface::UI, true);
   if (!event) return false;
   ReportEventAccess(cx, event, "UIEvent", "which", int(ApiAccess::Read));
-  args.rval().setNumber(event->kind == Kind::Keyboard ?
-      KeyboardCodeValue(cx, event, domain::KeyboardCode::Which) : 0);
+  // MouseEvent::Which in Gecko is Button() + 1, also inherited by PointerEvent,
+  // WheelEvent and DragEvent. Read the native slot, not an overridable getter.
+  if (IsA(event->kind, Iface::Mouse)) {
+    const int32_t button = JS::GetReservedSlot(event->object, kEventButton).toInt32();
+    args.rval().setNumber(uint32_t(button) + 1u);
+  } else {
+    args.rval().setNumber(event->kind == Kind::Keyboard ?
+        KeyboardCodeValue(cx, event, domain::KeyboardCode::Which) : 0);
+  }
   return true;
 }
 bool GetKeyboardModifierState(JSContext* cx, unsigned argc, JS::Value* vp) {

@@ -2,6 +2,7 @@
 #include <cstring>
 #include <string>
 #include "runtime/web_kit.h"
+#include "runtime/native_error.h"
 #include "js/Conversions.h"
 #include "js/ErrorReport.h"
 #include "js/Exception.h"
@@ -16,12 +17,11 @@ namespace ruyijs::interaction {
 bool Error(JSContext* cx, const char* name, const char* message) {
   JSExnType type = !strcmp(name, "TypeError") ? JSEXN_TYPEERR :
                    !strcmp(name, "RangeError") ? JSEXN_RANGEERR : JSEXN_ERR;
-  JS::RootedString text(cx, JS_NewStringCopyZ(cx, message));
-  JS::RootedString file(cx, JS_NewStringCopyZ(cx, "ruyijs:interaction"));
-  JS::Rooted<mozilla::Maybe<JS::Value>> cause(cx, mozilla::Nothing());
+  ThrowNativeError(cx, type, message);
+  if (type != JSEXN_ERR) return false;
   JS::RootedValue value(cx);
-  if (!text || !file || !JS::CreateError(cx, type, nullptr, file, 1,
-      JS::ColumnNumberOneOrigin(), nullptr, text, cause, &value)) return false;
+  if (!JS_GetPendingException(cx, &value) || !value.isObject()) return false;
+  JS_ClearPendingException(cx);
   if (type == JSEXN_ERR) {
     JS::RootedObject object(cx, &value.toObject());
     JS::RootedString label(cx, JS_NewStringCopyZ(cx, name));
@@ -87,7 +87,9 @@ Target* TargetReceiver(JSContext* cx, const JS::CallArgs& args,
   State* state = object ? Owner(cx, object, false) : nullptr;
   Target* target = state ? state->target(object) : nullptr;
   if (!target) {
-    Error(cx, "TypeError", "EventTarget receiver is incompatible");
+    std::string text;
+    if (!WebKit::BrandText(cx,args,"EventTarget",&text)) return nullptr;
+    Error(cx, "TypeError", text.c_str());
     return nullptr;
   }
   *owner = state;

@@ -1,21 +1,43 @@
 // Event coordinate projections. The event's existing slots remain the only
-// data source; no layout, scrolling, pointer state or secondary factory.
+// client data source; the geometry port projects page and padding coordinates.
 #include "interaction/internal.h"
 #include "runtime/page_helpers.h"
 #include "js/Conversions.h"
 #include "js/Object.h"
 #include "js/PropertyAndElement.h"
+#include <cmath>
+#include <cstring>
 
 namespace ruyijs::interaction {
 namespace {
 bool Coordinate(JSContext* cx, const JS::CallArgs& args, Iface iface,
                  const char* name, uint32_t slot, bool integer, bool negative) {
-  Event* event = Receiver(cx, args, iface);
+  Event* event = Receiver(cx, args, iface, true);
   if (!event) return false;
   ReportEventAccess(cx, event, InterfaceName(iface), name, int(ApiAccess::Read));
   JS::RootedValue value(cx, JS::Int32Value(0));
   if (iface != Iface::UI || IsA(event->kind, Iface::Mouse))
     value.set(JS::GetReservedSlot(event->object, slot));
+  const bool page = !std::strcmp(name,"pageX") || !std::strcmp(name,"pageY");
+  const bool offset = !std::strcmp(name,"offsetX") || !std::strcmp(name,"offsetY");
+  if (page || offset) {
+    State* owner=Owner(cx,event->object,true);
+    JS::RootedObject target(cx,owner->targetObject(event->value.target_id()));
+    double x=JS::GetReservedSlot(event->object,kEventClientX).toNumber();
+    double y=JS::GetReservedSlot(event->object,kEventClientY).toNumber();
+    // Before dispatch, offset coordinates fall back to the page point.
+    if (owner->coordinatePort &&
+        !owner->coordinatePort(owner->coordinateContext,target,offset && target,&x,&y)) return false;
+    double projected=slot==kEventClientX ? x : y;
+    // Gecko retains fractional coordinates for PointerEvents except the
+    // click/auxclick/contextmenu family; legacy mouse coordinates are rounded.
+    const auto type=event->value.type().value();
+    const bool click=type==std::string_view(reinterpret_cast<const char*>(u"click"),10) ||
+      type==std::string_view(reinterpret_cast<const char*>(u"auxclick"),16) ||
+      type==std::string_view(reinterpret_cast<const char*>(u"contextmenu"),22);
+    if (event->kind!=Kind::Pointer || click) projected=std::floor(projected+0.5);
+    value.setDouble(projected);
+  }
   if (negative) value.setDouble(-value.toNumber());
   if (integer) {
     int32_t number;
@@ -54,6 +76,9 @@ const JSPropertySpec wheel[] = {
   JS_PSG("wheelDelta", WheelDelta, JSPROP_ENUMERATE),
   JS_PSG("wheelDeltaX", WheelDeltaX, JSPROP_ENUMERATE),
   JS_PSG("wheelDeltaY", WheelDeltaY, JSPROP_ENUMERATE), JS_PS_END};
+}
+void Realm::SetCoordinatePort(bool (*port)(void*, JS::HandleObject, bool, double*, double*), void* context) {
+  state_->coordinatePort=port; state_->coordinateContext=context;
 }
 bool InstallEventCoordinates(State& state, Iface iface, JS::HandleObject prototype) {
   const JSPropertySpec* properties = iface == Iface::Mouse ? mouse :

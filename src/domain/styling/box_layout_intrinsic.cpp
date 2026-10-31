@@ -48,6 +48,7 @@ double BoxFlow::IntrinsicContent(size_t index, bool minimum, unsigned depth) {
   const auto& style = node.style;
   double result = 0;
   const auto display = style.Get("display");
+  if (display == "grid" || display == "inline-grid") return GridIntrinsic(index, minimum, depth);
   const bool flex = display == "flex" || display == "inline-flex";
   const auto direction = style.Get("flex-direction");
   const bool row = flex && direction.rfind("column", 0) != 0;

@@ -6,6 +6,7 @@
 #include "domain/styling/css_components.h"
 #include "domain/styling/css_numeric_value.h"
 #include "domain/styling/css_color_value.h"
+#include "domain/styling/css_condition_value.h"
 #include <cstdio>
 #include <algorithm>
 namespace ruyijs::domain::styling {
@@ -55,11 +56,15 @@ std::string GapText(const std::string& v) {
 }
 }  // namespace
 
-bool CssFlexShorthand(std::string_view name) { return name == "flex" || name == "flex-flow" || name == "gap"; }
+bool CssFlexShorthand(std::string_view name) { return name == "flex" || name == "flex-flow" || name == "gap" ||
+  name == "place-items" || name == "place-self" || name == "place-content"; }
 std::vector<std::string> CssFlexLonghands(std::string_view name) {
   if (name == "flex") return {"flex-grow", "flex-shrink", "flex-basis"};
   if (name == "flex-flow") return {"flex-direction", "flex-wrap"};
   if (name == "gap") return {"row-gap", "column-gap"};
+  if (name == "place-items") return {"align-items", "justify-items"};
+  if (name == "place-self") return {"align-self", "justify-self"};
+  if (name == "place-content") return {"align-content", "justify-content"};
   return {};
 }
 bool CssFlexExpand(const std::string& name, const std::string& input, bool important,
@@ -80,7 +85,23 @@ bool CssFlexExpand(const std::string& name, const std::string& input, bool impor
   if (tokens.empty()) return false;
   for (const auto& t : tokens) if (Wide(t)) return false;
   std::vector<std::string> values;
-  if (name == "flex") {
+  if (name.rfind("place-",0) == 0) {
+    size_t index=0;
+    const auto alignment=[&]() {
+      if(index==tokens.size()) return std::string();
+      auto part=tokens[index++];
+      if((part=="safe"||part=="unsafe"||part=="first"||part=="last"||part=="legacy") && index<tokens.size())
+        part+=" "+tokens[index++];
+      return part;
+    };
+    const auto align=alignment();
+    const bool explicit_justify=index<tokens.size();
+    auto justify=explicit_justify?alignment():align;
+    if(name=="place-content"&&!explicit_justify&&align.find("baseline")!=align.npos)
+      justify="start";
+    if(index!=tokens.size()||!CssSupportsProperty(names[0],align)||!CssSupportsProperty(names[1],justify)) return false;
+    values={align,justify};
+  } else if (name == "flex") {
     if (tokens.size() > 3) return false;
     if (tokens.size() == 1 && tokens[0] == "none") values = {"0", "0", "auto"};
     else if (tokens.size() == 1 && tokens[0] == "auto") values = {"1", "1", "auto"};
@@ -139,7 +160,7 @@ std::string CssFlexSerialize(const std::vector<CssDeclarationValue>& rows, const
   const bool allWide = std::all_of(values.begin(), values.end(), [&](const auto& v) { return v == values[0]; }) && Wide(values[0]);
   if (allWide) return values[0];
   if (std::any_of(values.begin(), values.end(), Wide)) return {};
-  if (name == "gap") return values[0] == values[1] ? values[0] : values[0] + " " + values[1];
+  if (name == "gap" || name.rfind("place-",0) == 0) return values[0] == values[1] ? values[0] : values[0] + " " + values[1];
   if (name == "flex-flow") {
     if (values[1] == "nowrap") return values[0];
     return values[0] == "row" ? values[1] : values[0] + " " + values[1];

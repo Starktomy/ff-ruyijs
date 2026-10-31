@@ -60,6 +60,22 @@ Matrix Transform(const BoxStyle& style, const BoxRect& box) {
   return Multiply(Multiply({1,0,0,1,ox,oy},result),{1,0,0,1,-ox,-oy});
 }
 }
+bool BoxPaddingPoint(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
+                     const BoxViewport& viewport, size_t target, double* x, double* y) {
+  Matrix matrix{1,0,0,1,0,0};
+  for (size_t i=target; i!=kNoBox; i=nodes[i].parent)
+    matrix=Multiply(Transform(nodes[i].style,boxes[i].border),matrix);
+  const double determinant=matrix[0]*matrix[3]-matrix[1]*matrix[2];
+  if (!std::isfinite(determinant) || determinant==0) return false;
+  const double px=BoxRound(double(float(*x)))+viewport.scroll_x-matrix[4];
+  const double py=BoxRound(double(float(*y)))+viewport.scroll_y-matrix[5];
+  const auto& box=boxes[target];
+  const double localX=(matrix[3]*px-matrix[2]*py)/determinant-box.border[0]-box.edge[3];
+  const double localY=(matrix[0]*py-matrix[1]*px)/determinant-box.border[1]-box.edge[0];
+  if (!std::isfinite(localX) || !std::isfinite(localY)) return false;
+  *x=double(float(BoxRound(localX))); *y=double(float(BoxRound(localY)));
+  return true;
+}
 BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
                        const BoxViewport& viewport, size_t target) {
   Matrix matrix{1,0,0,1,0,0};
@@ -82,11 +98,17 @@ BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxL
     return std::array<double,2>{low,high};
   };
   const auto horizontal=saturated(*x.first,*x.second),vertical=saturated(*y.first,*y.second);
-  // Firefox DOMRect::SetLayoutRect quantizes app-unit edges to 1/65536 CSS px,
-  // then stores each component through SetRect(float, float, float, float).
-  auto edge=[](double value) { return std::floor(BoxRound(value)*65536+.5)/65536; };
-  const double left=edge(horizontal[0]),top=edge(vertical[0]);
-  return {double(float(left)),double(float(top)),double(float(edge(horizontal[1])-left)),
-          double(float(edge(vertical[1])-top))};
+  // nsLayoutUtils::ScaleThenRoundGfxRectToAppRect rounds the origin and size
+  // independently. Rounding both endpoints can change the size by an app unit
+  // when a transform moves the origin across a rounding boundary.
+  const double x_app=BoxRound(horizontal[0]),y_app=BoxRound(vertical[0]);
+  const double width_app=BoxRound(horizontal[1]-horizontal[0]);
+  const double height_app=BoxRound(vertical[1]-vertical[0]);
+  // DOMRect::SetLayoutRect then quantizes the app-unit edges to 1/65536 CSS px
+  // and stores each component through SetRect(float, float, float, float).
+  auto edge=[](double value) { return std::floor(value*65536+.5)/65536; };
+  const double left=edge(x_app),top=edge(y_app);
+  return {double(float(left)),double(float(top)),double(float(edge(x_app+width_app)-left)),
+          double(float(edge(y_app+height_app)-top))};
 }
 }

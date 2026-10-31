@@ -95,13 +95,13 @@ bool CssSupportsProperty(const std::string& property,const std::string& input) {
   if(name=="flex-wrap") return Keyword(lower,"nowrap,wrap,wrap-reverse");
   if(name=="order") return CssNumericAllowed(lower,CssNumber,true,true);
   if(name=="row-gap"||name=="column-gap") return lower=="normal"||Box(lower,false,false,false);
-  if(name=="align-items"||name=="align-self"||name=="align-content"||name=="justify-content") {
-    const bool self=name=="align-self",items=name=="align-items";
+  if(name=="align-items"||name=="align-self"||name=="align-content"||name=="justify-content"||name=="justify-items"||name=="justify-self") {
+    const bool self=name=="align-self"||name=="justify-self",items=name=="align-items"||name=="justify-items";
     if(self&&lower=="auto") return true;
     if(Keyword(lower,"normal,stretch,center,start,end,flex-start,flex-end,baseline,first baseline,last baseline,safe center,unsafe center,safe end,unsafe end,safe flex-end,unsafe flex-end,safe start,unsafe start,safe flex-start,unsafe flex-start")) return true;
     if((self||items)&&Keyword(lower,"self-start,self-end,safe self-start,safe self-end,unsafe self-start,unsafe self-end")) return true;
     if(!self&&!items&&Keyword(lower,"space-between,space-around,space-evenly")) return true;
-    return name=="justify-content"&&Keyword(lower,"left,right,safe left,safe right,unsafe left,unsafe right");
+    return name.rfind("justify-",0)==0&&Keyword(lower,"left,right,safe left,safe right,unsafe left,unsafe right");
   }
   if(name=="position") return Keyword(lower,"static,relative,absolute,fixed,sticky");
   if(name=="visibility") return Keyword(lower,"visible,hidden,collapse");

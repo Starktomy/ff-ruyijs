@@ -1,4 +1,6 @@
 #include "document_model/state.h"
+#include "js/Conversions.h"
+#include <cmath>
 
 namespace ruyijs::document_model {
 namespace {
@@ -51,6 +53,14 @@ bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
   State& state = *entry->owner;
   const int slot = FunctionSlot(args);
   state.Observe("ShadowRoot", members[slot], int(ApiAccess::Call));
+  if (slot==17 || slot==18) {
+    if (argc<2) return TypeError(cx,"ShadowRoot point query requires two arguments");
+    double x=0,y=0;
+    if (!JS::ToNumber(cx,args[0],&x) || !JS::ToNumber(cx,args[1],&y)) return false;
+    x=double(float(x)); y=double(float(y));
+    if (!std::isfinite(x) || !std::isfinite(y)) return TypeError(cx,"ShadowRoot point coordinates must be finite");
+    return QueryPoint(cx,*entry,x,y,slot==18,args.rval());
+  }
   if (slot == 20) {
     if (!argc) return TypeError(cx, "getElementById requires an ID");
     DomString id;

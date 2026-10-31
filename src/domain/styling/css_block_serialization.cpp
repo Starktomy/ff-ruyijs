@@ -15,7 +15,7 @@ namespace {
 constexpr const char* kShorthands[] = {
   "font", "border", "border-image", "border-width", "border-style", "border-color",
   "border-top", "border-right", "border-bottom", "border-left", "margin", "padding", "inset",
-  "flex", "flex-flow", "gap", "overflow"};
+  "flex", "flex-flow", "gap", "overflow", "place-items", "place-self", "place-content"};
 constexpr const char* kBorderImage[] = {"border-image-source", "border-image-slice",
                                         "border-image-width", "border-image-outset",
                                         "border-image-repeat"};

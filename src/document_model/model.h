@@ -474,6 +474,7 @@ class Model final {
   Status InputWillValidate(NodeKey, bool* result) const noexcept;
   Status InputChecked(NodeKey, bool* result, bool indeterminate = false) const noexcept;
   Status SetInputChecked(NodeKey, bool value, bool indeterminate = false) noexcept;
+  Status ControlSelectorState(NodeKey, bool* checked, bool* indeterminate) const noexcept;
   Status ControlValidation(NodeKey, uint32_t* flags, DomString* message = nullptr) const noexcept;
   Status SetInputNumber(NodeKey, double value, bool step) noexcept;
   Status InputRange(NodeKey, DomStringView replacement, int32_t start, int32_t end, bool explicit_range) noexcept;

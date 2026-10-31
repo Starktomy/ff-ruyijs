@@ -1,0 +1,122 @@
+{
+  "overlap": [
+    "front",
+    "back",
+    "html"
+  ],
+  "pointer": [
+    "back",
+    "html"
+  ],
+  "hidden": [
+    "back",
+    "html"
+  ],
+  "transparent": [
+    "front",
+    "back",
+    "html"
+  ],
+  "edges": [
+    [
+      "front",
+      "back",
+      "html"
+    ],
+    [
+      "html"
+    ],
+    [],
+    []
+  ],
+  "errors": [
+    "TypeError",
+    "TypeError",
+    "TypeError"
+  ],
+  "lengths": [
+    2,
+    2
+  ],
+  "stacking": [
+    "upper",
+    "nested",
+    "lower",
+    "html"
+  ],
+  "escaping": [
+    "nested",
+    "upper",
+    "lower",
+    "html"
+  ],
+  "opacity": [
+    "upper",
+    "nested",
+    "lower",
+    "html"
+  ],
+  "positionedParent": [
+    "child",
+    "parent",
+    "html"
+  ],
+  "clip": [
+    [
+      "outside",
+      "clip",
+      "html"
+    ],
+    [
+      "html"
+    ]
+  ],
+  "scroll": [
+    "outside",
+    "clip",
+    "html"
+  ],
+  "rotate": [
+    [
+      "html"
+    ],
+    [
+      "rotate",
+      "html"
+    ],
+    [
+      "rotate",
+      "html"
+    ]
+  ],
+  "shadow": [
+    [
+      "host",
+      "html"
+    ],
+    [
+      "inner"
+    ],
+    []
+  ],
+  "detached": [],
+  "inactive": [],
+  "frame": [
+    [
+      "frame",
+      "html"
+    ],
+    [
+      "inside",
+      "body",
+      "html"
+    ],
+    [],
+    [
+      "inside",
+      "body",
+      "html"
+    ]
+  ],
+  "hiddenFrame": []
+}

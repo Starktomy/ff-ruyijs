@@ -11,7 +11,7 @@ enum Method { GetAttribute, SetAttribute, RemoveAttribute, HasAttribute, Names, 
 enum Adjacent { AdjacentHtml, AdjacentElement, AdjacentText };
 static bool Get(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element, args, "Element");
   if (!entry) return false;
   State& state = *entry->owner;
   int32_t field = FunctionSlot(args);
@@ -28,7 +28,7 @@ static bool Get(JSContext* cx, unsigned argc, JS::Value* vp) {
 }
 static bool Set(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element, args, "Element");
   if (!entry) return false;
   DomString value;
   if (!String(cx, args.get(0), &value)) return false;
@@ -39,7 +39,7 @@ static bool Set(JSContext* cx, unsigned argc, JS::Value* vp) {
 }
 static bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element, args, "Element");
   if (!entry) return false;
   auto op = Method(FunctionSlot(args));
   if (op == Names || op == HasAttributes) {
@@ -119,7 +119,7 @@ static bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
 }
 static bool GetMarkup(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element, args, "Element");
   if (!entry) return false;
   State& state = *entry->owner;
   DomString value;
@@ -130,7 +130,7 @@ static bool GetMarkup(JSContext* cx, unsigned argc, JS::Value* vp) {
 }
 static bool SetMarkup(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element);
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element, args, "Element");
   if (!entry) return false;
   DomString value;  // [LegacyNullToEmptyString]: null clears the children or markup.
   if (!String(cx, args.get(0), &value, true)) return false;

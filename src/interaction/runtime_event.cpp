@@ -98,7 +98,7 @@ bool FireRuntimeEvent(State& state, JS::HandleObject target, const char* interfa
 bool DispatchInput(JSContext* cx, JS::HandleObject target, const char* type,
                    JS::HandleObject init, double time_ms) {
   bool accepted = false;
-  for (const char* name : {"pointerdown", "pointermove", "pointerup", "pointercancel",
+  for (const char* name : {"pointerdown", "pointerrawupdate", "pointermove", "pointerup", "pointercancel",
                           "pointerover", "pointerout", "pointerenter", "pointerleave",
                           "mousedown", "mousemove", "mouseup", "click", "dblclick",
                           "contextmenu", "mouseover", "mouseout", "mouseenter", "mouseleave"})

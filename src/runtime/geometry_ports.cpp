@@ -135,6 +135,37 @@ bool BindGeometryPorts(BrowsingContext& context) {
     return true;
   }, &context);
   context.geometry->SetBoxPorts(boxes);
+  context.styling->SetUsedDimensionsPort([](void* raw, JS::HandleObject element, double* width,
+                                          double* height, bool* connected, bool* present) {
+    auto& owner=*static_cast<BrowsingContext*>(raw);
+    document_model::GeometryNode node;
+    JS::RootedObject parent(owner.cx);
+    JS::RootedObjectVector children(owner.cx);
+    JS::RootedValue value(owner.cx,JS::ObjectValue(*element));
+    if(!owner.document->ReadGeometryNode(value,&node,&parent,&children)) return false;
+    *connected=node.connected;*present=false;
+    auto* factory=static_cast<web_geometry::Realm*>(node.factory);
+    return !node.connected || !factory || factory->UsedDimensions(element,width,height,present);
+  }, &context);
+  context.document->SetPointQueryPort([](void* raw, JS::HandleObject root, double x, double y,
+                                         std::vector<document_model::NodeKey>* out) {
+    return static_cast<BrowsingContext*>(raw)->geometry->QueryPoint(root,x,y,out);
+  }, &context);
+  context.interaction->SetCoordinatePort([](void* raw, JS::HandleObject target, bool offset,
+                                          double* x, double* y) {
+    auto& owner=*static_cast<BrowsingContext*>(raw);
+    if (!offset) {
+      double width=0,height=0,sx=0,sy=0;
+      if (!owner.environment->ReadLayoutViewport(&width,&height,&sx,&sy)) return false;
+      *x+=sx; *y+=sy;
+      return true;
+    }
+    JS::RootedValue value(owner.cx,JS::ObjectValue(*target));
+    bool element=false;
+    if (!owner.document->IsElementValue(value,&element)) return false;
+    if (!element) { *x=*y=0; return true; }
+    return owner.geometry->PaddingPoint(target,x,y);
+  }, &context);
   context.document->SetOffsetGeometryPort([](void* raw, JS::HandleObject element,
                                              document_model::OffsetGeometry* out) {
     auto& owner = *static_cast<BrowsingContext*>(raw);

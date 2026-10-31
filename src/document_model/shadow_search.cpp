@@ -52,7 +52,11 @@ bool Realm::DescribeElements(std::string* out) {
       std::string visible = to_utf8(*text_content);
       while (!visible.empty() && (visible.front() == ' ' || visible.front() == '\n')) visible.erase(visible.begin());
       while (!visible.empty() && (visible.back() == ' ' || visible.back() == '\n')) visible.pop_back();
-      if (visible.size() > 160) visible = visible.substr(0, 160);
+      if (visible.size() > 160) {
+        size_t end=160;
+        while(end && (static_cast<unsigned char>(visible[end])&0xc0)==0x80) --end;
+        visible.resize(end);
+      }
       if (!visible.empty()) { text += " text="; text += visible; }
     }
     text += "\n";

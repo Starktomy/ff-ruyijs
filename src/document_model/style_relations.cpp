@@ -27,6 +27,7 @@ bool Realm::ReadStyleRelation(JS::HandleObject element,uint64_t document,uint64_
   *out=StyleRelationFrame{};out->identity=Identity(current);out->parent=Identity(node.parent_element);
   out->html=node.is_html_element&&node.document_mode==DocumentMode::Html;
   out->value.tag=StyleSourceText(*node.local_name);
+  if(!state.Check(state.model.ControlSelectorState(current,&out->checked,&out->indeterminate))) return false;
   if(!ElementAlong(state,node.previous_sibling,false,&out->previous)||
       !ElementAlong(state,node.next_sibling,true,&out->next)||
       !ElementAlong(state,node.first_child,true,&out->first)) return false;

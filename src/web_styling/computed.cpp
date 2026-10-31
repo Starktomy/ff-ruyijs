@@ -9,6 +9,8 @@
 #include "web_styling/page_descriptors.h"
 #include "domain/styling/css_page_value.h"
 #include "domain/styling/css_components.h"
+#include "domain/styling/css_font_value.h"
+#include "js/Realm.h"
 #include "document_model/style_port.h"
 
 #include <memory>
@@ -44,7 +46,26 @@ bool Text(JSContext* cx, const std::string& text, JS::MutableHandleValue out) {
 }
 }  // namespace
 
-const JSClass kStyleViewClass = {"CSSStyleDeclaration", JSCLASS_HAS_RESERVED_SLOTS(3)};
+bool detail::ReadComputedBlock(State& state, JS::HandleObject element, bool defaults, std::string* block) {
+  JSAutoRealm realm(state.cx,state.page);
+  JS::RootedObject target(state.cx,element);
+  if(!JS_WrapObject(state.cx,&target)) return false;
+  ComputedStyle computed;
+  ComputedStyleReader reader(state);
+  if(!(defaults?reader.ReadDefault(target,&computed):reader.Read(target,&computed))) return false;
+  if(state.usedDimensions&&!defaults) {
+    double width=0,height=0;bool connected=false,present=false;
+    if(!state.usedDimensions(state.usedDimensionsContext,target,&width,&height,&connected,&present)) return false;
+    if(!connected) {block->clear();return true;}
+    if(present) for(auto& entry:computed.values) {
+      if(entry.first=="width"||entry.first=="height")
+        entry.second=domain::styling::CssFontNumber(entry.first=="width"?width:height)+"px";
+    }
+  }
+  *block=BuildComputedBlock(computed);return true;
+}
+
+const JSClass kStyleViewClass = {"CSSStyleDeclaration", JSCLASS_HAS_RESERVED_SLOTS(5)};
 
 bool OwnsDeclaration(JSObject* object) {
   return JS::GetClass(object)==&kStyleViewClass||JS::GetClass(object)==&kPageDescriptorsClass;
@@ -87,6 +108,7 @@ static bool DispatchDeclaration(State& caller, JSContext* cx, StyleMember member
     JS::RootedValue priority(cx, JS::UndefinedValue());
     return detail::SetRuleProperty(caller, self, property, args.get(0), priority, false, args.rval());
   }
+  if(!rule&&member==StyleMember::CssTextGet) return Text(cx,"",args.rval());
   std::string block, name, value;
   if (!page&&!detail::ReadViewBlock(cx, self, &block)) return false;
   bool important = false;
@@ -140,9 +162,9 @@ bool GetComputedStyle(JSContext* cx, unsigned argc, JS::Value* vp) {
   // so it is ignored and the element's own declaration is returned (D37).
   ComputedStyle computed;
   if (!ReadComputed(state, element, &computed)) return false;
-  std::string block = BuildComputedBlock(computed);
   JS::RootedObject view(cx);
-  if (!state.NewStyleView(block, &view)) return false;
+  if (!state.NewStyleView("", &view)) return false;
+  JS::SetReservedSlot(view,3,JS::ObjectValue(*element));
   args.rval().setObject(*view);
   return true;
 }
@@ -168,9 +190,10 @@ bool GetDefaultComputedStyle(JSContext* cx, unsigned argc, JS::Value* vp) {
   ComputedStyle computed;
   ComputedStyleReader reader(state);
   if (!reader.ReadDefault(element, &computed)) return false;
-  std::string block = BuildComputedBlock(computed);
   JS::RootedObject view(cx);
-  if (!state.NewStyleView(block, &view)) return false;
+  if (!state.NewStyleView("", &view)) return false;
+  JS::SetReservedSlot(view,3,JS::ObjectValue(*element));
+  JS::SetReservedSlot(view,4,JS::BooleanValue(true));
   args.rval().setObject(*view);
   return true;
 }

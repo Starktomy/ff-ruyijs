@@ -79,6 +79,8 @@ bool SelectorPseudoMatches(const ElementNode& node,const std::string& name,const
   if(name=="empty") return node.empty;
   if(name=="defined") return node.tag.find('-')==node.tag.npos;
   if(name=="focus"||name=="focus-visible") return node.focused;
+  if(name=="checked") return node.checked;
+  if(name=="indeterminate") return node.indeterminate;
   bool first=name=="first-child"||name=="first-of-type"||name=="only-child"||name=="only-of-type";
   bool last=name=="last-child"||name=="last-of-type"||name=="only-child"||name=="only-of-type";
   if(first||last) {
