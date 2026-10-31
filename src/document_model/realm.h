@@ -9,6 +9,7 @@
 #include "document_model/node_source.h"
 #include "document_model/style_source.h"
 #include "document_model/style_port.h"
+#include "document_model/trusted_input.h"
 #include "document_model/layout_source.h"
 namespace ruyijs { class PageHelpers; }
 namespace ruyijs::interaction { class Realm; enum class PathResult; }
@@ -156,6 +157,7 @@ class Realm final {
   void ElementScrollDelivered(JS::HandleObject element);
   // Bound by the shared coordinator after installation; cleared before teardown.
   void SetSecurityPorts(CspMetaPort meta, CspInlinePort handler, void* context);
+  void SetTrustedInputPorts(const TrustedInputPorts& ports);
   // Whether `node` is connected to this realm's main document, read from the
   // unique tree; false for a non-node.
   bool NodeConnected(JS::HandleObject node);

@@ -112,7 +112,10 @@ class ProfileInheritanceTests(unittest.TestCase):
         with Context(shell=ROOT / "dist/js") as context:
             context.configure_fingerprint(PROFILE)
             for url in ["https://profile.test/first", "https://other.test/next", "https://profile.test/final"]:
-                context.load_page(url, "<!doctype html><iframe></iframe>")
+                context.put_resource(url, "<!doctype html><iframe></iframe>",
+                                     headers=[["Content-Type", "text/html"]])
+                context.navigate(url)
+                context.advance(10)
                 context.collect_garbage()
                 self.probe(context)
                 self.probe(context, "frames[0]")

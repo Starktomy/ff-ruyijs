@@ -230,6 +230,7 @@ struct State {
   // Content Security owner ports (content_security_ports.cpp): policy
   // delivery from a <meta http-equiv> in <head> and the event handler
   // content-attribute check. The policy itself lives in web_security.
+  TrustedInputPorts trustedInput;
   CspMetaPort cspMeta = nullptr;
   CspInlinePort cspHandler = nullptr;
   void* cspContext = nullptr;
@@ -367,6 +368,7 @@ bool DocumentImport(JSContext*, unsigned, JS::Value*);
 bool ClearDocument(Wrapper&);
 bool NodeArgument(State&, JS::HandleValue, NodeKey*, bool nullable = false);
 bool String(JSContext*, JS::HandleValue, DomString*, bool null_empty = false);
+bool TrustedString(State&, JS::HandleValue, int kind, const char* sink, DomString*, bool null_empty = false);
 bool Value(JSContext*, DomStringView, JS::MutableHandleValue);
 bool Value(JSContext*, const std::optional<DomString>&, JS::MutableHandleValue);
 // A reflected URL content attribute of `key` (url_reflection.cpp).

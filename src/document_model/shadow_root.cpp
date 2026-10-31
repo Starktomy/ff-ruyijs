@@ -43,7 +43,7 @@ bool Write(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (slot != 6) return ThrowDOM(state, "NotSupportedError", "ShadowRoot capability awaits its original subsystem port");
   if (!argc) return TypeError(cx, "innerHTML setter requires a value");
   DomString html;
-  if (!String(cx, args[0], &html, true) || !state.Check(state.model.SetInnerHtml(entry->key, html))) return false;
+  if (!TrustedString(state, args[0], 0, "ShadowRoot innerHTML", &html, true) || !state.Check(state.model.SetInnerHtml(entry->key, html))) return false;
   args.rval().setUndefined(); return true;
 }
 bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
@@ -75,7 +75,7 @@ bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (slot == 19) {
     if (!argc) return TypeError(cx, "setHTMLUnsafe requires markup");
     DomString html;
-    if (!String(cx, args[0], &html) || !state.Check(state.model.SetInnerHtml(entry->key, html))) return false;
+    if (!TrustedString(state, args[0], 0, "ShadowRoot setHTMLUnsafe", &html) || !state.Check(state.model.SetInnerHtml(entry->key, html))) return false;
     args.rval().setUndefined(); return true;
   }
   return ThrowDOM(state, "NotSupportedError", "ShadowRoot capability awaits its original subsystem port");

@@ -65,6 +65,19 @@ void Realm::SetSecurityPorts(CspMetaPort meta, CspInlinePort handler, void* cont
   state_->cspContext = context;
 }
 
+void Realm::SetTrustedInputPorts(const TrustedInputPorts& ports) { state_->trustedInput = ports; }
+bool TrustedString(State& state, JS::HandleValue input, int kind, const char* sink,
+                   DomString* text, bool null_empty) {
+  JSContext* cx = state.cx;
+  if (!state.trustedInput.string) return String(cx, input, text, null_empty);
+  JS::RootedValue value(cx, input);
+  if (null_empty && value.isNull()) value.setString(JS_GetEmptyString(cx));
+  JS::RootedString output(cx);
+  if (!state.trustedInput.string(state.trustedInput.context, value, kind, sink, &output)) return false;
+  value.setString(output);
+  return String(cx, value, text);
+}
+
 bool Realm::NodeConnected(JS::HandleObject node) {
   Wrapper* entry = state_->Find(node.get());
   if (!entry || entry->dead || entry->key.document != state_->main.document) return false;

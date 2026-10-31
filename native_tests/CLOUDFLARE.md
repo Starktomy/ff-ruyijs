@@ -4,6 +4,18 @@
 NSS and Neqo adapters. The Linux port PR remains on `linux-native`; these
 follow-up changes are developed and pushed separately.
 
+The native Linux runtime now completes this page with `--profile linux`.
+The first successful standard-example run took 17.284 s, received a 624-character
+non-dummy token and made one verification POST; CapSkip's own backend reported
+`Success=true` and `Hostname=capskip.com`. The command exited 0 with no surfaced
+script errors. This was the original page, using the current repository engine.
+The full native suite passes 74 cases and smoke checks pass.
+
+```sh
+PYTHONPATH=python python3 -B -m ruyijs.examples cloudflare --direct \
+  --profile linux --timeout 120 --output artifacts/capskip-verified.json
+```
+
 The target is the original page at
 <https://capskip.com/captcha-demo/cloudflare-turnstile/>. Production sitekey
 `0x4AAAAAADogn3t3_JKwKkgS` is read from the live document on every attempt.
@@ -230,7 +242,36 @@ Firefox reference. The original page still returns `600010` (17.918 s), with no
 token or backend verification. Inline declaration indexing is not changed here;
 the existing computed-value and pseudo-element limitations remain.
 
-## Current live result
+## Trusted Types default policies and verified original-page result
+
+The VM trace identified `PaVB6` as a three-sink default-policy check. An
+independent Firefox 159 case invoked the HTML, Script and ScriptURL callbacks
+and returned the bit mask 7; the native runtime invoked none and returned 0.
+CSP parsing now preserves `require-trusted-types-for` and `trusted-types`
+tokens. The native Trusted Types owner reads the target document's policy and
+runs its default callback with the input, expected type and sink name. Exact
+trusted brands use their native data rather than an overrideable stringifier.
+Cross-realm factory calls create policies in the receiver's realm. Policy name
+allow lists, duplicates, missing/null callback results, exception propagation
+and eval/Function source identity follow the existing native owner paths and
+[Trusted Types algorithms](https://w3c.github.io/trusted-types/dist/spec/).
+
+The connected sinks cover Element inner/outer/adjacent HTML, ShadowRoot markup,
+iframe srcdoc and script src/text/textContent; eval/Function use the engine's
+existing compilation hook. This is a bounded compatibility implementation:
+Trusted Types checks at generic attributes, document.write, string timers,
+worker CSP transport and complete violation reporting remain pending.
+
+Five cases pass, covering inactive policies, exact brands, rejection before
+mutation, receiver realms, callback arguments/results, exceptions, duplicate
+rules and real top-level navigation. The profile-inheritance navigation test
+now also uses the actual `navigate` path rather than the host HTML loader.
+The full suite passes 74 cases and smoke checks pass. After these changes, the
+standard example on the original CapSkip page returned `status=verified` in
+17.284 s: token length 624, `dummyToken=false`, one backend verification POST,
+`Success=true`, `Hostname=capskip.com`, no surfaced script errors and exit 0.
+
+## Earlier live observations
 
 Both the DataDome and Akamai example configurations load the original CapSkip
 page, initialize a 300×65 production widget and deliver a trusted checkbox

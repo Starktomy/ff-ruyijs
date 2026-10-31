@@ -14,7 +14,6 @@
 
 namespace ruyijs::web_trusted_types {
 const JSClass kPolicyClass = {"TrustedTypePolicy", JSCLASS_HAS_RESERVED_SLOTS(PolicySlotCount)};
-namespace {
 const char* const kMethods[3] = {"createHTML", "createScript", "createScriptURL"};
 // USVString: lone surrogates become U+FFFD.
 JSString* WellFormed(JSContext* cx, JS::HandleString text) {
@@ -39,6 +38,7 @@ JSString* WellFormed(JSContext* cx, JS::HandleString text) {
   }
   return changed ? JS_NewUCStringCopyN(cx, chars.data(), chars.size()) : plain;
 }
+namespace {
 bool Name(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   JS::RootedObject self(cx);
