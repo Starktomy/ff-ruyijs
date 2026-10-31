@@ -44,6 +44,22 @@ data and quota boundaries. The smoke checks and changed-file Pyflakes pass.
 The existing Akamai, DataDome and CreepJS live examples all still pass their
 original success criteria after these changes.
 
+## Media binding follow-up
+
+Native VM diagnostics identified the differing `enumerateDevices` receiver
+check. `MediaDevices.enumerateDevices` and `getUserMedia` now turn receiver and
+constraint-getter exceptions into rejected promises, using the existing media
+exception helper. Three local cases verify invalid receivers, preservation of
+the thrown value, enumeration and the synchronous `getSupportedConstraints`
+method. These tests failed on the previous runtime and pass after the change.
+The full suite passes 37 cases and smoke checks pass. The original-page live
+attempt still returns `600010` (17.201 s), without a token or backend request.
+
+An instrumented diagnostic confirmed that the challenge probes installed fonts
+using `new FontFace(name, 'local("name")')`. The current binary-only source
+loader rejects every such source, explaining the empty font list. This is the
+next compatibility defect under investigation; it has not yet been fixed.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip
