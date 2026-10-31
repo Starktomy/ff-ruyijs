@@ -170,6 +170,62 @@ Reproducible probe and token-free results are in
 `artifacts/turnstile-resource-benchmark/measure.py` and `results.json` in that
 directory. `preflight-*` files are superseded diagnostic measurements.
 
+### Linux font memory optimization
+
+2026-11-01, optimized runtime `5198053`, compared with `a251e6e` on the same
+five-CPU EPYC host. Native sampling identified font measurement and table
+copies alongside JavaScript/JIT work. Linux now initializes Fontconfig on the
+first font query, shares bounded font-selection and HarfBuzz-face caches among
+font consumers on one JS thread, and lets HarfBuzz reference Skia's mapped font
+stream. The stream stays alive with the HarfBuzz blob, including TTC face indices.
+Fonts without a usable SFNT memory stream retain the table-copy provider.
+
+The final comparison alternated old/new binaries with fresh Contexts, direct
+connections, the Linux profile, `timeout=30` and `attempts=1`. Serial CapSkip
+results use five batches per binary; two/four concurrent results use three.
+Values below are medians, with arrows from baseline to optimized:
+
+| Concurrent solves | Peak tree PSS | CPU seconds per token | Token latency | Batch duration |
+| --- | --- | --- | --- | --- |
+| 1 | 423 → 299 MiB (**−29.4%**) | 3.619 → 3.533 (−2.4%) | 2.952 → 2.882 s | 2.953 → 2.882 s |
+| 2 | 677 → 517 MiB (**−23.7%**) | 3.319 → 3.447 (+3.9%) | 2.948 → 2.861 s | 2.972 → 2.966 s |
+| 4 | 1255 → 972 MiB (**−22.6%**) | 3.490 → 3.387 (−2.9%) | 3.837 → 3.738 s | 3.876 → 4.011 s |
+
+One NOL control per binary fell from 422 to 312 MiB PSS and 3.680 to 3.383 CPU
+seconds. The action/cData control fell from 401 to 297 MiB and 3.567 to 3.199 CPU
+seconds. Across all 25 calls per binary, total cgroup CPU divided by successful
+calls fell from 3.582 to 3.428 seconds (4.3%). All 50 calls succeeded on their
+first attempt, with no remaining processes after cleanup. These small samples
+show a substantial memory reduction; CPU savings are modest and vary by batch.
+The two-concurrent CPU median rose, and four-concurrent batch duration rose, so
+this does not establish a general CPU or throughput improvement at every load.
+
+Measurement boundaries are the same as above: whole-process-tree cgroup CPU,
+50 ms simultaneous PSS/RSS samples, including Context startup and cleanup,
+excluding backend verification and external sampler CPU. Challenge variation
+and sampler contention still apply. The public solver API requires no changes.
+
+All 97 native tests, smoke and pyflakes pass. A 360-case old/new rendering
+comparison covers eight font families, three styles, three sizes and five
+strings (Latin with a combining mark, CJK, Arabic, emoji and empty text).
+All 12 TextMetrics fields, RGBA hashes and PNG hashes match; PNG comparison
+excludes the intentionally randomized `deBG` metadata chunk. The regression
+suite also checks shared-font use across parent/child frames, garbage collection,
+navigation and isolated font profiles.
+
+Fresh optimized tokens also passed all five demo backends: CapSkip, ZeroCaptcha
+non-interactive and action/cData, and Lusostreams managed and invisible. The
+metadata case preserved `demo_login` / `demo-session-42`; a corrupt-token control
+was rejected with `invalid-input-response`. NOL here checks token acquisition
+only, not login acceptance. Sanitized backend results are in
+`artifacts/turnstile-efficiency/live-validation.json`.
+
+Ignored reproducible evidence: `artifacts/turnstile-efficiency/final_compare.py`,
+`results.json`, `render_compare.py`, `render-results.json`, `native-tests.log`
+and `smoke.log`. The measurement driver imports the earlier resource probe.
+The result file records the SHA256 of both binaries. Earlier exploratory
+`fonts*`, `stream*`, `alloc-probe*` and profiler files are not the final comparison.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX
