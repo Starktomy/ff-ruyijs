@@ -186,12 +186,51 @@ baseline/optimized with direct networking and the Linux profile. All passed the
 original page's backend check with one POST and no surfaced script errors.
 Token medians were 10.034 versus 9.743 s; backend medians were 11.148 versus
 10.973 s. This small difference and the 9.355–11.521 s token range do not establish
-a stable live speedup; the repeatable reduction is in the targeted local work.
+a stable live speedup; the measured local reduction is limited to the targeted workload.
 
 Ignored evidence: `artifacts/capskip-shadow-comparison.json`, its six live reports,
 `artifacts/capskip-reuse-{shadow,shadow_existing_style}-{before,after}.json`,
 `artifacts/capskip-shadow-reuse-native-tests.log` and
 `artifacts/capskip-shadow-reuse-smoke.log`.
+
+## Combined validation against the starting version
+
+A final alternating comparison used the original `91595d7` runtime and the
+retained `10efa46` runtime (both optimizations). Six fresh Contexts ran the
+original capskip URL, direct connection, Linux profile and system clock in
+baseline/optimized/optimized/baseline/baseline/optimized order. A Python wrapper
+measured RPC wall time and `/proc/<pid>/task/<pid>/stat` main-thread CPU; no
+native debugger, challenge script modification or synthetic token was used.
+
+| Metric, seconds | Baseline samples | Optimized samples | Median reduction |
+| --- | --- | --- | --- |
+| Token observed | 11.201 / 12.647 / 11.068 | 10.533 / 9.615 / 12.172 | 6.0% |
+| Main-thread CPU at token | 9.95 / 10.67 / 9.91 | 8.81 / 8.43 / 10.20 | 11.5% |
+| Backend verified | 12.433 / 13.694 / 12.178 | 11.571 / 10.800 / 13.391 | 6.9% |
+
+All six passed backend verification (`Success=true`, `Hostname=capskip.com`),
+made one verification POST and had no surfaced script errors. Both variants
+produced two 624-character and one 645-character token. Console diagnostic
+messages are preserved in the reports; no claim of zero console errors is made.
+The different challenge runs and network tail still vary: these three samples
+per version support reduced local work but are not a latency guarantee.
+Main-thread CPU excludes worker/helper processes and uses 10 ms counters.
+
+Ignored evidence: `artifacts/capskip-final-cost-comparison.json`,
+`artifacts/capskip-final-cost-summary.json`, each referenced success report and
+its `-costs.json` / `-resources.json`, and
+`artifacts/capskip_final_cost_compare.py`. Final retained native code passed all
+84 native tests and smoke in `artifacts/capskip-shadow-reuse-{native-tests,smoke}.log`.
+
+### Allocation follow-up
+
+A separate trial reused each scope's aggregate-pointer vector and skipped
+custom-property text serialization for geometry reads. All 84 native tests,
+smoke, rectangles and exposed computed values remained identical, but ten
+alternating offline runs with 1,200 custom properties and 250 elements had
+medians of 0.7892 s before and 0.7896 s after. The trial was not retained because
+it did not demonstrate a benefit. Evidence is in the ignored
+`artifacts/capskip-style-read-repeat-comparison.json`.
 
 ### Remaining candidates
 
