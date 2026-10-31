@@ -25,11 +25,18 @@ showing `Success=true` and `Hostname=capskip.com`.
   viewport and dispatched `clientX=400`. Host input now resolves the target's
   current browsing context and dispatches at `clientX=150`. Local tests also
   check the frame screen origin, event view/trust, explicit typing and Backspace.
+- The full-page layout cache discarded trees spanning multiple cascade scopes.
+  Layout now validates a native sample and current sheet fingerprint in every
+  scope. Unchanged composed trees reuse boxes; changed trees spanning shadow
+  scopes still rebuild styles. Nested CSSOM edits, adopted sheets, disabled
+  sheets, forced GC and iframe viewport updates have local regressions.
 
-The full native suite passes 29 cases, including the maintainer's shader
+The full native suite passes 31 cases, including the maintainer's shader
 compile/link regression. The network case includes 11 independent checks;
 the three new decoding checks cover unknown sizes, concatenation, incomplete
 data and quota boundaries. The smoke checks and changed-file Pyflakes pass.
+The existing Akamai, DataDome and CreepJS live examples all still pass their
+original success criteria after these changes.
 
 ## Current live result
 
@@ -39,20 +46,25 @@ click. Both still receive `600010`, with zero-length tokens and no CapSkip
 verification POST. No surfaced script errors were recorded. The Akamai run
 completed in approximately 90 s with exit 1. These are individual observations.
 
+With composed layout reuse enabled, the DataDome configuration reached the
+same `600010` failure in 15.395 s, without recorded widget `overrun` events.
+It still produced no token or backend verification request. A synthetic
+120-element document with a closed shadow root and 150 stylesheet rules took
+0.367 s for 30 repeated body-rectangle reads before the change and 0.033 s
+afterwards, with identical results. These are one-off local observations,
+not a general benchmark or a successful Turnstile solve.
+
 Cloudflare documents `600*` as a generic challenge failure. It does not reveal
 the particular failing check, so this result does not establish that either
 the network or one browser subsystem alone causes the failure. The optional
 Private Access Token request's HTTP 401 is not by itself a challenge failure.
 See [Cloudflare's error reference](https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/).
 
-Full-page execution also shows long layout work and widget `overrunBegin` /
-`overrunEnd` events. A sampled native stack resolves styles while measuring
-the main document. The existing layout cache excludes trees spanning multiple
-cascade scopes, which includes the closed root containing this widget. Further
-work should measure this cost and preserve all shadow stylesheet invalidation
-rules before allowing cache reuse. Isolating the widget reduces the observed
-attempt to a few seconds but still produces `600010`; an isolated attempt is
-not evidence of original-page success.
+Before layout reuse, full-page execution showed long layout work and widget
+`overrunBegin` / `overrunEnd` events. A sampled native stack resolved styles
+while measuring the main document. This was a measurable performance problem
+but does not explain the remaining challenge rejection. An isolated widget
+also produces `600010`; it is not evidence of original-page success.
 
 Reproduce from the checkout:
 

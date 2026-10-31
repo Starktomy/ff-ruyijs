@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <cstdint>
 #include <utility>
 #include <string>
 #include <memory>
@@ -49,6 +50,9 @@ class ComputedStyleReader final {
   bool ReadDefault(JS::HandleObject, ComputedStyle*);
   // The cascade scopes (document or shadow root) this reader resolved.
   size_t Scopes() const;
+  // One element and the current stylesheet fingerprint per scope read. A
+  // layout cache must validate all scopes, including closed shadow roots.
+  bool ScopeStamps(JS::MutableHandleObjectVector, std::vector<uint64_t>*);
   // The selector dependencies of the scopes read so far (Web Geometry decides
   // from them whether an attribute change allows reusing other styles).
   const SelectorDependencies& Dependencies() const;

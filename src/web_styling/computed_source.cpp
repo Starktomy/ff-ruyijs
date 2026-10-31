@@ -15,11 +15,12 @@ struct ComputedStyleReader::Impl {
   };
   State& state;
   JS::RootedObjectVector scopes;
+  JS::RootedObjectVector samples;
   std::vector<std::unique_ptr<Scope>> sources;
   // Relation frames read once per session, shared by every element it reads.
   std::unique_ptr<SelectorInput> input;
   SelectorDependencies dependencies;
-  explicit Impl(State& owner):state(owner),scopes(owner.cx) {}
+  explicit Impl(State& owner):state(owner),scopes(owner.cx),samples(owner.cx) {}
 };
 namespace {
 namespace css = ruyijs::domain::styling;
@@ -83,7 +84,7 @@ bool ComputedStyleReader::Read(JS::HandleObject element, ComputedStyle* out) {
     auto entry=std::make_unique<Impl::Scope>();
     std::shared_ptr<const SelectorDependencies> dependencies;
     if (!ReadCascadeSources(state,element,&entry->aggregates,&dependencies,&entry->computation.store)||
-        !impl_->scopes.append(scope)) return false;
+        !impl_->scopes.append(scope) || !impl_->samples.append(element)) return false;
     if (dependencies) impl_->dependencies.Merge(*dependencies);
     impl_->sources.push_back(std::move(entry));
   }
@@ -157,6 +158,15 @@ bool Realm::ReadComputed(JS::HandleObject element, ComputedStyle* out) {
   return web_styling::ReadComputed(*state_, element, out);
 }
 size_t ComputedStyleReader::Scopes() const { return impl_->scopes.length(); }
+bool ComputedStyleReader::ScopeStamps(JS::MutableHandleObjectVector samples, std::vector<uint64_t>* stamps) {
+  for (size_t i=0;i<impl_->samples.length();++i) {
+    JS::RootedObject element(impl_->state.cx,impl_->samples[i]);
+    uint64_t stamp=0;
+    if (!CascadeStamp(impl_->state,element,&stamp) || !samples.append(element)) return false;
+    stamps->push_back(stamp);
+  }
+  return true;
+}
 const SelectorDependencies& ComputedStyleReader::Dependencies() const { return impl_->dependencies; }
 bool Realm::CascadeStamp(JS::HandleObject element, uint64_t* stamp) {
   return web_styling::CascadeStamp(*state_, element, stamp);
