@@ -9,6 +9,45 @@ remain available as historical references. See [README.md](README.md) for the
 current regression-test setup. Measurements below retain their original
 commit IDs and runtime descriptions.
 
+## Upstream 0.3.0 rebase validation
+
+2026-11-01, runtime and test sources at `3e64250`, based on upstream `d32dd74`.
+Both the shell and NSS/Neqo helper were rebuilt with upstream's Linux build
+tools, using the local Firefox 159 donor. Superseded helper modules from the
+previous build were removed before testing. The Linux path now uses the
+release adapter and its streaming decoder; the retained source zstd fix
+continues to apply to the macOS helper. Linux's existing decoder independently
+passes the unknown-size, concatenated, truncated and bounded-output cases.
+
+All 84 native tests pass with no skips, including 11 independent network checks,
+3 WebTransport checks and 3 image-codec checks run by the suite's subprocesses.
+The smoke test, Python byte compilation and CI pyflakes checks pass. The
+regressions use upstream's OpenSSL filename and network interfaces. The
+JavaScript WebTransport peer uses a short-lived ECDSA certificate and the
+public `serverCertificateHashes` option; its helper peer uses an explicit CA.
+
+Three sequential attempts ran the unmodified standard example on the original
+CapSkip page, with direct networking, `--profile linux`, and a fresh Context
+each time. All three exited 0 with `status=verified`, a non-dummy 624-character
+token, one verification POST, `Success=true` and `Hostname=capskip.com`.
+
+| Run | Token observed (s) | Backend verified and report collected (s) |
+| --- | --- | --- |
+| 1 | 10.404 | 11.430 |
+| 2 | 9.764 | 10.949 |
+| 3 | 9.830 | 11.784 |
+| Median | 9.830 | 11.430 |
+
+Timing boundaries remain those described below. Each run had zero surfaced
+script errors and four console error diagnostics, which remain in its report.
+This confirms the rebased Linux integration on this host; it is a small sample,
+not a new controlled performance comparison. Windows/macOS builds and proxy
+connections were not tested in this integration run.
+
+Ignored evidence: `artifacts/main-rebase-live/summary.json` records the commit,
+runtime SHA256 and three reports. Build and validation logs are
+`artifacts/main-rebase-{build,necko,native-tests,smoke}.log`.
+
 ## Original development results
 
 2026-10-31, `dev/linux-next`, native Linux SpiderMonkey 159 / shared POSIX

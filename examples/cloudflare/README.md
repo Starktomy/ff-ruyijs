@@ -4,6 +4,16 @@
 `https://capskip.com/captcha-demo/cloudflare-turnstile/`，记录挑战事件、
 错误码及 CapSkip 后台验证结果。每次导航获取页面当前的配置和 nonce。
 
+当前 fork 的 `main` 已基于上游 `d32dd74`（0.3.0）重新变基，保留 Cloudflare
+兼容修复和所有已验证的优化。重建 Linux 运行时及上游网络适配器后，84 项
+native 测试、smoke 和 Python 静态检查通过。2026-11-01 连续三次真实后台
+验证成功，总耗时分别为 11.430、10.949、11.784 秒；token 观察时间中位数
+为 9.830 秒。三次均获得 624 字符的非 dummy token，后台返回
+`Success=true`、`Hostname=capskip.com`。这是少量实测样本，不代表固定时延。
+详情见 [变基验证记录](../../native_tests/CLOUDFLARE.md#upstream-030-rebase-validation)。
+
+以下为变基前各阶段的历史验证记录。
+
 2026-10-31，`dev/linux-next` 的原生 Linux 运行时使用 `--profile linux`
 连续两次验证成功：分别耗时 17.284 秒、16.737 秒，均获得 624 字符的非 dummy
 响应 token，并由原页面后台返回 `Success=true`、`Hostname=capskip.com`，
@@ -34,7 +44,8 @@ Context，不复用页面、token 或网络缓存），结果如下，单位为�
 
 新增回归覆盖节点移动/删除/插入、跨文档采用、默认样式、CSSOM 规则编辑、
 每个元素的 CSS 变量及 `!important` 顺序；完整 77 项 native 测试和 smoke 通过。
-后续候选为跨 Shadow DOM 的增量布局、CSS 规则校验值缓存，具体收益尚未实测。
+后续已加入 CSS 规则校验值缓存，以及跨 Shadow DOM 的内联样式增量复用；
+相关回归与实测记录见下方文档。
 详细分析及样本见 [CLOUDFLARE.md](../../native_tests/CLOUDFLARE.md#second-performance-pass)。
 
 在仓库根目录复现：
@@ -51,8 +62,8 @@ PYTHONPATH=python python3 -B -m ruyijs.examples cloudflare --direct \
 Firefox 159 实测的屏幕、视口、Mesa/llvmpipe WebGL 标识、扩展和数值限制；
 CPU 数使用当前主机的值。上述成功结果使用该 Linux 配置。
 
-支持 `--proxy http://127.0.0.1:7890`。当前 Linux 代理路由仍依赖 donor xpcshell，
-只有共享 NSS helper 的安装应使用 `--direct`。
+支持 `--proxy http://127.0.0.1:7890`。本页记录的实测使用 `--direct`；
+变基后的 Linux 版使用上游发布包的网络适配器，代理路由未在本轮验证。
 
 只有拿到非 dummy token，且原页面的后台结果同时显示 `Success=true` 和
 `Hostname=capskip.com`，才返回退出码 0。挑战失败、网络错误和超时均返回 1。
@@ -61,6 +72,6 @@ JSON 记录 token 长度，省略响应 token、请求正文和 Cookie 值。
 修复覆盖未知大小的 Zstandard 响应、宿主 closed shadow root 检查、iframe
 输入坐标、布局与 computed style、媒体 Promise、Linux 字体、WebGPU 暴露、
 离线音频、数学默认值、模块配置继承、CSS 属性枚举及 Trusted Types 默认策略。
-最新 74 项 native 测试、smoke checks 和 Akamai、DataDome、CreepJS
+最初成功时的 74 项 native 测试、smoke checks 和 Akamai、DataDome、CreepJS
 三个在线示例均通过。Windows/macOS 原生构建未在本机运行。
 实现范围和历史诊断见 [CLOUDFLARE.md](../../native_tests/CLOUDFLARE.md)。
