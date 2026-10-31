@@ -13,6 +13,7 @@ import json
 import os
 import socket
 import ssl
+import sys
 import warnings
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -66,14 +67,15 @@ def library_path() -> Path | None:
         path = Path(override)
         return path if path.is_file() else None
     here = Path(__file__).resolve()
+    name = "libnecko_core.so" if sys.platform == "linux" else "libnecko_core.dylib"
     for parent in here.parents:
-        preferred = parent / "dist" / "necko_tls" / "libnecko_core.dylib"
-        staged = parent / "dist" / "necko" / "libnecko_core.dylib"
+        preferred = parent / "dist" / "necko_tls" / name
+        staged = parent / "dist" / "necko" / name
         if preferred.is_file():
             return preferred
         if staged.is_file():
             return staged
-    sibling = here.parent / "libnecko_core.dylib"
+    sibling = here.parent / name
     if sibling.is_file():
         return sibling
     return None

@@ -54,6 +54,9 @@ def _ensure_necko_win():
 
 
 def _library_path():
+    if os.name != "nt":
+        from necko.closed_route import _quic_library_path
+        return _quic_library_path()
     name = (
         "necko_quic.dll"
         if os.name == "nt"
