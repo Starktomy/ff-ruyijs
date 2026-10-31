@@ -15,6 +15,7 @@ EXAMPLES = {
     "datadome": ("DataDome/datadome.py", "DataDome 设备检测"),
     "creepjs": ("creepjs/creepjs.py", "CreepJS"),
     "truepeople": ("truepeople/truepeople.py", "TruePeopleSearch Cloudflare 托管质询"),
+    "cloudflare": ("cloudflare/cloudflare.py", "CapSkip Turnstile 真实页面诊断"),
 }
 
 
