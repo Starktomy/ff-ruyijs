@@ -221,6 +221,18 @@ bool Visit(State& s, JS::HandleObject object, JS::HandleObject target, size_t pa
 bool Same(const document_model::NodeKey& a, const document_model::NodeKey& b) {
   return a.document==b.document&&a.node==b.node;
 }
+bool SameScopes(State& s, const LayoutCache& cache) {
+  for(const auto& scope:cache.scopes) {
+    JS::RootedObject sample(s.cx,scope.sample->get());
+    uint64_t stamp=0;
+    if(!s.boxPorts.stamp(s.boxPorts.context,sample,&stamp)) {
+      JS_ClearPendingException(s.cx);  // The fresh layout reports real errors.
+      return false;
+    }
+    if(stamp!=scope.value) return false;
+  }
+  return true;
+}
 }
 namespace {
 bool Result(const State& s, const LayoutCache& cache, size_t found, box::BoxViewport viewport, bool content,
@@ -265,11 +277,12 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   if(!s.boxPorts.viewport(s.boxPorts.context,&viewport.width,&viewport.height,&viewport.scroll_x,&viewport.scroll_y)) return false;
   const std::array<double,4> view{viewport.width,viewport.height,viewport.scroll_x,viewport.scroll_y};
   uint64_t stamp=0;
-  bool stamped=s.boxPorts.stamp&&s.boxPorts.stamp(s.boxPorts.context,target,&stamp);
+  bool stamped=s.boxPorts.stamp&&s.boxPorts.stamp(s.boxPorts.context,root,&stamp);
   if(!stamped) JS_ClearPendingException(s.cx);  // Uncached: the full path below reports real errors.
   const auto& cached=s.layoutCache;
-  if(stamped&&cached&&cached->revision==revision&&cached->styles==stamp&&cached->viewport==view&&
-     Same(cached->root,rootKey)&&Same(cached->focused,focused)) {
+  const bool reusable=stamped&&cached&&cached->styles==stamp&&cached->viewport==view&&
+     Same(cached->root,rootKey)&&Same(cached->focused,focused)&&SameScopes(s,*cached);
+  if(reusable&&cached->revision==revision) {
     const auto hit=cached->index.find({targetKey.document,targetKey.node});
     if(hit!=cached->index.end()) { *out=cached; *index=hit->second; }
     return true;
@@ -279,8 +292,9 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   auto styles=s.boxPorts.styles(s.boxPorts.context);
   if(!styles) return false;
   Pass pass{*cache,size_t(-1),*styles};
-  if(stamped&&cached&&cached->styles==stamp&&cached->viewport==view&&
-     Same(cached->root,rootKey)&&Same(cached->focused,focused)) {
+  // A fresh reader must rediscover every scope after a DOM change. The
+  // incremental selector-dependency path below currently covers one scope.
+  if(reusable&&cached->scopes.size()<=1) {
     pass.previous=cached.get();
     pass.reached.assign(cached->nodes.size(),0);
   }
@@ -305,8 +319,14 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   const size_t found=pass.found;
   if(!box::ComputeBoxLayout(cache->nodes,viewport,&cache->layout,&cache->scrollport))
     return WebKit::Fail(s.cx,"Element box layout budget exceeded");
-  // One cascade scope only: a shadow scope's sheets are outside the fingerprint.
-  if(stamped&&styles->Scopes()<=1) {
+  if(stamped) {
+    JS::RootedObjectVector samples(s.cx);
+    std::vector<uint64_t> stamps;
+    if(!styles->ScopeStamps(&samples,&stamps)) return false;
+    for(size_t i=0;i<samples.length();++i) {
+      auto sample=std::make_unique<JS::PersistentRootedObject>(s.cx,samples[i]);
+      cache->scopes.push_back({std::move(sample),stamps[i]});
+    }
     cache->root=rootKey; cache->focused=focused; cache->revision=revision; cache->styles=stamp;
     cache->structure=structure; cache->tree=tree;
     cache->viewport=view;
