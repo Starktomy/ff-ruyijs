@@ -36,6 +36,7 @@ struct FontCollection {
     return SkFontMgr_New_FontConfig(config, SkFontScanner_Make_FreeType());
   }();
   std::unordered_map<std::string, sk_sp<SkTypeface>> selected;
+  std::unordered_map<std::string, sk_sp<SkTypeface>> familyMatches;
   std::unordered_map<uint32_t, hb_face_t*> faces;
   uint64_t generation = 0;
   ~FontCollection() { for (auto [id, face] : faces) hb_face_destroy(face); }
@@ -83,12 +84,25 @@ SkFontStyle Style(const FontInput& input) {
   return {int(input.weight), SkFontStyle::kNormal_Width,
            input.italic ? SkFontStyle::kItalic_Slant : SkFontStyle::kUpright_Slant};
 }
+// Family/style matching does not depend on the character. Keep it separate
+// from the glyph fallback cache so a new character does not repeat Fontconfig's
+// substitutions and face matching. Glyph coverage is still checked below.
+sk_sp<SkTypeface> MatchFamily(FontCollection& fonts, const std::string& family, const FontInput& input) {
+  const auto key = family + '\0' + std::to_string(input.weight) + (input.italic ? ":i" : ":n");
+  if (auto found = fonts.familyMatches.find(key); found != fonts.familyMatches.end()) return found->second;
+  auto face = fonts.manager->matchFamilyStyle(family.c_str(), Style(input));
+  if (fonts.familyMatches.size() >= 256) fonts.familyMatches.clear();
+  fonts.familyMatches.emplace(key, face);
+  return face;
+}
 sk_sp<SkTypeface> Select(FontCollection& fonts, const FontInput& input, uint32_t code) {
   if (!fonts.manager) return nullptr;
   std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
   const std::string languageValue = FontLanguage(input);
   const auto generation = FontConfigGeneration();
-  if (fonts.generation != generation) { fonts.selected.clear(); fonts.generation = generation; }
+  if (fonts.generation != generation) {
+    fonts.selected.clear(); fonts.familyMatches.clear(); fonts.generation = generation;
+  }
   const auto key = input.family + '\0' + languageValue + '\0' + std::to_string(input.weight) +
       (input.italic ? ":i:" : ":n:") + std::to_string(code);
   if (auto found = fonts.selected.find(key); found != fonts.selected.end()) return found->second;
@@ -96,11 +110,11 @@ sk_sp<SkTypeface> Select(FontCollection& fonts, const FontInput& input, uint32_t
   const char* language = languageValue.c_str();
   for (const auto& family : Families(input)) {
     if (!FontFamilyVisible(convert.from_bytes(family))) continue;
-    auto face = fonts.manager->matchFamilyStyle(family.c_str(), Style(input));
+    auto face = MatchFamily(fonts, family, input);
     if (face && (!code || face->unicharToGlyph(code))) { fonts.selected[key] = face; return face; }
   }
   auto fallback = fonts.manager->matchFamilyStyleCharacter(nullptr, Style(input), &language, 1, code ? code : ' ');
-  auto face = fallback ? std::move(fallback) : fonts.manager->matchFamilyStyle("sans-serif", Style(input));
+  auto face = fallback ? std::move(fallback) : MatchFamily(fonts, "sans-serif", input);
   fonts.selected[key] = face;
   return face;
 }
