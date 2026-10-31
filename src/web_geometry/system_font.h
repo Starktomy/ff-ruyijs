@@ -106,6 +106,11 @@ class SystemFonts final {
   bool HasLocalFont(const std::string& name);
 #endif
  private:
+#if defined(__linux__)
+  // Linux realms on one JS thread share bounded, profile-aware font caches.
+  std::shared_ptr<FontCollection> collection_;
+#else
   std::unique_ptr<FontCollection> collection_;
+#endif
 };
 }
