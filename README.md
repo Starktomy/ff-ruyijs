@@ -153,6 +153,15 @@ with Context() as context:
     print(context.eval("[navigator.language, screen.width]"))  # ['zh-CN', 1920]
 ```
 
+Generate reproducible Linux or Windows Firefox 159 profiles with
+`from ruyijs import generate_profile` and
+`generate_profile("windows", seed=42, locale="en-US")`. Pass the result to
+`configure_fingerprint()` before page execution, using `Context(tls="159")`.
+`python -m ruyijs.profile_generator --os linux --seed 42 --output linux.json`
+exports JSON; `--count 20 --output-dir profiles` exports a batch. These configure
+browser properties; fonts and rendering still depend on the native host.
+See [profile generator](docs/profile-generator.zh-CN.md) for options and Turnstile integration.
+
 ### Native network over Necko
 
 In-page `fetch` and XHR ride real HTTP/1.1, 2, and 3, through a proxy scoped to the context. Serve responses yourself with `put_resource()` to replay an entire captured flow offline. Inspect every request with `net_log()`. On macOS, pages load over direct HTTPS; proxies are not available there yet (`docs/macos.md`).

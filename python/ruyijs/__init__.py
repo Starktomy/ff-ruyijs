@@ -9,10 +9,13 @@ from ._version import __version__
 
 __all__ = ["Context", "JSError", "UNDEFINED", "ReentrantError", "JSObject", "JSFunction",
            "get_runtime_path", "__version__", "TurnstileError", "TurnstileSolution",
-           "solve_turnstile", "solve_turnstile_details"]
+           "solve_turnstile", "solve_turnstile_details", "generate_profile"]
 
 
 def __getattr__(name):
+    if name == "generate_profile":
+        from .profile_generator import generate_profile
+        return generate_profile
     if name in ("TurnstileError", "TurnstileSolution", "solve_turnstile",
                 "solve_turnstile_details"):
         from . import turnstile
