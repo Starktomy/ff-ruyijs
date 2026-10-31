@@ -184,9 +184,10 @@ bool PageLoad::InlinePosition(Owners& owners, JS::HandleObject script, EvalOptio
 bool PageLoad::Execute(Owners& owners, JS::HandleObject script, JS::HandleString code,
                        const std::string& filename, uint32_t* executed, int phase,
                        const EvalOptions& position, const char* introduction) {
-  // Parser scripts checkpoint before evaluation (donor ScriptLoader), while
-  // currentScript still names their caller. Dynamic inline execution remains
-  // inside its caller's JS stack; it must not add this parser boundary.
+  // Parser and delivered dynamic scripts run their post-script microtask
+  // checkpoint while currentScript still names them, matching Firefox's script
+  // cleanup order. Dynamic inline execution remains inside its caller's JS
+  // stack and does not add this boundary.
   JSContext* cx = owners.cx;
   JS::RootedValue value(cx);
   JS::RootedObject previous(cx);
@@ -203,12 +204,10 @@ bool PageLoad::Execute(Owners& owners, JS::HandleObject script, JS::HandleString
       !Evaluate(cx, owners.page, code, filename.c_str(), NoCheckpoint, &value, &ok, position,
                 introduction))
     return false;
-  if(phase==2)checkpoint_(cx);
+  if(phase!=1)checkpoint_(cx);
   if(JS_IsExceptionPending(cx))CaptureOperationFailure(cx);
   if(owners.document.ScriptGeneration()==generation && !owners.document.SetCurrentScript(previous))return false;
   ++*executed;
-  if(phase==0)checkpoint_(cx);
-  if (JS_IsExceptionPending(cx)) CaptureOperationFailure(cx);
   return true;
 }
 }
