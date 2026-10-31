@@ -103,6 +103,31 @@ without a token or backend request. The font, media and WebGPU changes do not
 establish a production solve. This copy defect has not been established as the
 cause of the remaining challenge rejection.
 
+## AudioBufferSourceNode playback
+
+The native VM trace established what `Rdqz4` measures: the challenge renders a
+buffer source and tests that its samples include `0.5`. That source was never
+registered with the offline graph, and its rendering was a silent pass-through.
+An independent eight-frame source filled with `0.5` reproduced all-zero output.
+The existing graph now registers buffer sources from both factory and
+constructor, renders their supplied channels, and follows their start, stop,
+offset, duration and loop settings through the existing gain/mixing path.
+
+Six local cases cover the 1000-sample challenge trigger, promise/event data,
+stereo through gain, GC, scheduling, loops, inactive/disconnected sources and
+invalid schedule calls. The full suite passes 51 cases and smoke checks pass.
+The challenge's `Rdqz4` is now false, matching the successful Firefox reference;
+its previously differing font list and two native-method checks also match.
+The original-page Linux-profile attempt still returns `600010` (20.091 s),
+with no token or backend verification.
+
+This implements offline buffer-source playback. Reverse playback and `ended`
+events are still pending. Nonmatching sample rates and fractional playback
+steps use linear interpolation, not Gecko's full resampler; sample-exact Gecko
+parity is not established for those paths. Buffer contents are captured at
+render entry; source-start acquisition/detachment is still pending. Existing
+non-source filter DSP limitations remain.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip

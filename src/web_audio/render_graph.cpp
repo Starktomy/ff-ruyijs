@@ -138,7 +138,9 @@ bool BuildRenderNodes(State& state, JS::HandleObject context, float sample_rate,
         inputs = std::max(inputs, (*nodes)[other].channels);
       }
     }
-    current.channels =
+    current.bufferSource = JS::GetReservedSlot(node, kNodeDefIndexSlot).toInt32() == 14;
+    if (current.bufferSource && !ConfigureBufferVoice(state, node, sample_rate, &current.bufferVoice)) return false;
+    current.channels = current.bufferSource ? std::max(1u, uint32_t(current.bufferVoice.channels.size())) :
         ChannelCount(cx, node, current.kind, inputs, destination_channels);
     current.input.assign(size_t(current.channels) * kRenderQuantum, 0.0f);
     current.output.assign(size_t(current.channels) * kRenderQuantum, 0.0f);

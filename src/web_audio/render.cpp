@@ -76,8 +76,12 @@ void MixInto(const float* source, uint32_t source_channels, float* destination,
 }
 
 // Runs one render quantum of |node|'s own algorithm.
-bool ProcessNode(State& state, RenderNode& node) {
+bool ProcessNode(State& state, RenderNode& node, int32_t offset, double rate) {
   JSContext* cx = state.cx;
+  if (node.bufferSource) {
+    node.bufferVoice.Compute(node.output.data(), kRenderQuantum, double(offset) / rate, rate);
+    return true;
+  }
   if (node.kind == kOscillatorNode) {
     node.voice.Compute(node.output.data(), kRenderQuantum);
     return true;
@@ -146,7 +150,7 @@ bool RenderPlaceholder(State& state, JS::HandleObject context,
       for (size_t other : node.inputs)
         MixInto(nodes[other].output.data(), nodes[other].channels, node.input.data(),
                 node.channels);
-      if (!ProcessNode(state, node)) return false;
+      if (!ProcessNode(state, node, offset, rate)) return false;
     }
     // The destination's output is the rendered quantum. Gecko clips at the
     // device, so an offline render keeps values outside [-1, 1].

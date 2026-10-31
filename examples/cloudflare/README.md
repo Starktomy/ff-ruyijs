@@ -29,8 +29,8 @@ DataDome 和 Akamai 两种配置均能加载真实 widget 并点击复选框，�
 复测已修复未知内容大小的 Zstandard 响应解码、closed shadow root 的宿主检查，
 以及 iframe 点击误用顶层视口和键盘焦点的问题。布局缓存现会验证每个 shadow
 样式作用域，并已修复 computed style 旧快照和尺寸读取、媒体 Promise 拒绝、
-Linux `local()` 字体加载、Linux WebGPU 默认暴露和音频缓冲区复制。
-字体探测已与成功的独立 Firefox 对照一致。Linux 配置最近一次原页面尝试约 18 秒
-返回同样失败。45 项 native 测试、
+Linux `local()` 字体加载、Linux WebGPU 默认暴露、音频缓冲区复制和缓冲音源离线播放。
+字体和缓冲音源探测已与成功的独立 Firefox 对照一致。Linux 配置最近一次原页面尝试约 20 秒
+返回同样失败。51 项 native 测试、
 smoke checks 和三个原有在线示例通过。
 详细记录见 [CLOUDFLARE.md](../../native_tests/CLOUDFLARE.md)。
