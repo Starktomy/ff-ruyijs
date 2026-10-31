@@ -1,6 +1,7 @@
 include README.md LICENSE NOTICE pyproject.toml setup.py runtime.json
 include tools/wheel_runtime.py
 recursive-include python/ruyijs *.py
+include python/ruyijs/turnstile_linux_profile.json
 include examples/README.md examples/google/google_search.py examples/boss/boss.py
 recursive-include examples/turnstile *.py *.md
 include examples/网上房地产/fangdi.py examples/网上房地产/README.md
