@@ -61,6 +61,81 @@ class ShadowLayoutTests(unittest.TestCase):
             # again. Firefox 159 also drops the old CSSOM-only edits here.
             self.assertEqual(context.eval("size()"), [300, 65])
 
+    def test_inline_reuse_tracks_inheritance_variables_and_has(self):
+        with Context(shell=ROOT / "dist/js") as context:
+            context.load_page("https://layout.test/", """<!doctype html><div id="host"></div><script>
+                const host=document.getElementById('host'), root=host.attachShadow({mode:'closed'});
+                root.innerHTML='<style>.parent{display:block;font-size:10px;--w:20px}'+
+                    '.leaf{display:block;width:var(--w);height:1em}'+
+                    '.parent:has(.trigger[style]) .leaf{width:55px}'+
+                    '.trigger[style] + .tail{width:65px}.tail{display:block;width:15px}</style>'+
+                    '<section class="parent"><div class="leaf"></div><i class="trigger"></i>'+
+                    '<div class="tail"></div></section>';
+                const parent=root.querySelector('.parent'), leaf=root.querySelector('.leaf');
+                const trigger=root.querySelector('.trigger'), tail=root.querySelector('.tail');
+                const read=()=>[leaf.getBoundingClientRect().width,leaf.getBoundingClientRect().height,
+                    tail.getBoundingClientRect().width];
+                </script>""")
+            self.assertEqual(context.eval("[read(),read()]"), [[20, 10, 15]] * 2)
+            context.eval("parent.style.setProperty('--w','35px')")
+            self.assertEqual(context.eval("read()"), [35, 10, 15])
+            context.eval("parent.style.fontSize='20px'")
+            self.assertEqual(context.eval("read()"), [35, 20, 15])
+            context.eval("trigger.style.color='red'")
+            self.assertEqual(context.eval("read()"), [55, 20, 65])
+            context.eval("trigger.removeAttribute('style')")
+            context.collect_garbage()
+            self.assertEqual(context.eval("read()"), [35, 20, 15])
+            context.eval("trigger.setAttribute('style','')")
+            self.assertEqual(context.eval("read()"), [55, 20, 65])
+            context.eval("trigger.removeAttribute('style')")
+            self.assertEqual(context.eval("read()"), [35, 20, 15])
+
+    def test_inline_reuse_rediscovers_revealed_shadow_scopes(self):
+        with Context(shell=ROOT / "dist/js") as context:
+            context.load_page("https://layout.test/", """<!doctype html><div id="host"></div><script>
+                const root=document.getElementById('host').attachShadow({mode:'closed'});
+                root.innerHTML='<style>.leaf{display:block;width:20px;height:10px}</style>'+
+                    '<div class="leaf"></div><section style="display:none"></section>';
+                const leaf=root.querySelector('.leaf'), hidden=root.querySelector('section');
+                const nested=hidden.attachShadow({mode:'closed'});
+                nested.innerHTML='<style>div{display:block;width:30px;height:10px}</style><div></div>';
+                const probe=nested.querySelector('div'), rule=nested.querySelector('style').sheet.cssRules[0];
+                const read=()=>[leaf.getBoundingClientRect().width,probe.getBoundingClientRect().width];
+                </script>""")
+            self.assertEqual(context.eval("[read(),read()]"), [[20, 0]] * 2)
+            context.eval("hidden.style.display='block'")
+            self.assertEqual(context.eval("read()"), [20, 30])
+            context.eval("leaf.style.width='25px';read();rule.style.width='45px'")
+            self.assertEqual(context.eval("read()"), [25, 45])
+            context.eval("hidden.style.display='none'")
+            self.assertEqual(context.eval("read()"), [25, 0])
+            context.eval("rule.style.width='60px';hidden.style.display='block'")
+            context.collect_garbage()
+            self.assertEqual(context.eval("read()"), [25, 60])
+
+    def test_structure_changes_keep_scope_specific_styles(self):
+        with Context(shell=ROOT / "dist/js") as context:
+            context.load_page("https://layout.test/", """<!doctype html><div id="a"></div><div id="b"></div><script>
+                const roots=['a','b'].map(id=>document.getElementById(id).attachShadow({mode:'closed'}));
+                roots.forEach((root,i)=>root.innerHTML='<style>.leaf{display:block;width:'+
+                    (20+10*i)+'px;height:10px}</style><div class="leaf"></div>');
+                const probe=roots[0].querySelector('.leaf');
+                const read=()=>probe.getBoundingClientRect().width;
+                </script>""")
+            self.assertEqual(context.eval("[read(),read()]"), [20, 20])
+            context.eval("roots[1].appendChild(probe)")
+            self.assertEqual(context.eval("read()"), 30)
+            context.eval("probe.style.height='15px'")
+            self.assertEqual(context.eval("read()"), 30)
+            context.eval("roots[0].appendChild(probe)")
+            self.assertEqual(context.eval("read()"), 20)
+            context.eval("probe.className='other';probe.style.width='40px'")
+            self.assertEqual(context.eval("read()"), 40)
+            context.eval("probe.style.width='';probe.className='leaf'")
+            context.collect_garbage()
+            self.assertEqual(context.eval("read()"), 20)
+
 
 if __name__ == "__main__":
     unittest.main()
