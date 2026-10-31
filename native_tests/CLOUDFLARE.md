@@ -86,6 +86,23 @@ attempt still returns `600010` (17.361 s), with no token or backend request.
 The other differing boolean is being traced separately; its meaning is not yet
 established.
 
+## AudioBuffer copying
+
+A local probe exposed an independent buffer-copy defect: copying a five-sample
+channel into a three-sample destination threw an out-of-range TypeError, and
+copying overlapping views overwrote later source samples. Both channel-copy
+methods now use bounded native `memmove`, require an unshared Float32Array,
+convert indices as WebIDL unsigned longs, preserve untouched destination tails
+and report invalid channels with `IndexSizeError`. Firefox 159 reference probes
+confirmed the expected copies and argument/error behavior. Three cases cover
+bounds, overlapping/subarray views, conversion and detached inputs.
+
+The native suite passes 45 cases and smoke checks pass. With the optional Linux
+example profile, the original-page attempt still returns `600010` (18.450 s),
+without a token or backend request. The font, media and WebGPU changes do not
+establish a production solve. This copy defect has not been established as the
+cause of the remaining challenge rejection.
+
 ## Current live result
 
 Both the DataDome and Akamai example configurations load the original CapSkip
