@@ -14,7 +14,7 @@ enum class Directive : uint8_t { Default, Script, ScriptElem, ScriptAttr, Other 
 enum class Keyword : uint8_t { None, UnsafeInline, UnsafeEval, UnsafeHashes, StrictDynamic,
                                WasmUnsafeEval, ReportSample };
 struct Source {
-  enum class Kind : uint8_t { Keyword, Nonce, Hash, Scheme, Host } kind = Kind::Host;
+  enum class Kind : uint8_t { Keyword, Nonce, Hash, Scheme, Host, Token } kind = Kind::Host;
   Keyword keyword = Keyword::None;
   std::string value;   // nonce or hash digest (base64), scheme without ':', host
   std::string algo;    // hash algorithm, lowercase

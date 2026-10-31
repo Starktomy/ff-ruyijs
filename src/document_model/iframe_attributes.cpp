@@ -36,7 +36,8 @@ bool FrameSet(JSContext* cx, const JS::CallArgs& args, const char16_t* name,
   if (std::strcmp(node.interface_name, "HTMLIFrameElement"))
     return TypeError(cx, "HTMLIFrameElement member called on an incompatible receiver");
   DomString text;
-  if (!String(cx, args.get(0), &text)) return false;
+  if (url_attribute ? !String(cx, args.get(0), &text) :
+      !TrustedString(*entry->owner, args.get(0), 0, "HTMLIFrameElement srcdoc", &text)) return false;
   if (url_attribute && text.empty())
     return state.Check(state.model.RemoveAttribute(entry->key, name));
   return state.Check(state.model.SetAttribute(entry->key, name, text));

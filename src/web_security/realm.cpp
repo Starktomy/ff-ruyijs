@@ -103,6 +103,27 @@ void Realm::AddPolicy(const std::u16string& text) {
 void Realm::InheritFrom(const Realm& creator) { state_->policies = creator.state_->policies; }
 void Realm::Reset() { state_->policies.clear(); ++state_->generation; }
 bool Realm::Enforcing() const { return !state_->policies.empty(); }
+bool Realm::RequiresTrustedTypes() const {
+  for (const auto& policy : state_->policies)
+    for (const auto& entry : policy.directives)
+      if (entry.name == "require-trusted-types-for")
+        for (const auto& token : entry.sources) if (token.value == "'script'") return true;
+  return false;
+}
+bool Realm::AllowsTrustedPolicy(const std::string& name, bool duplicate) const {
+  for (const auto& policy : state_->policies) {
+    for (const auto& entry : policy.directives) {
+      if (entry.name != "trusted-types") continue;
+      bool allowed = false, duplicates = false;
+      for (const auto& token : entry.sources) {
+        if (token.value == "*" || token.value == name) allowed = true;
+        if (token.value == "'allow-duplicates'") duplicates = true;
+      }
+      if (!allowed || (duplicate && !duplicates)) return false;
+    }
+  }
+  return true;
+}
 void Realm::BeginParse() { state_->holding = true; }
 bool Realm::EndParse() { return FlushHeldReports(*state_); }
 

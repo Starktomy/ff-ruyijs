@@ -133,8 +133,9 @@ static bool SetMarkup(JSContext* cx, unsigned argc, JS::Value* vp) {
   Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Element);
   if (!entry) return false;
   DomString value;  // [LegacyNullToEmptyString]: null clears the children or markup.
-  if (!String(cx, args.get(0), &value, true)) return false;
   State& state = *entry->owner;
+  if (!TrustedString(state, args.get(0), 0,
+      FunctionSlot(args) == 1 ? "Element outerHTML" : "Element innerHTML", &value, true)) return false;
   Status status = FunctionSlot(args) == 1 ? state.model.ReplaceOuter(entry->key, value)
                                           : state.model.SetInnerHtml(entry->key, value);
   if (!state.Check(status)) return false;
@@ -155,8 +156,8 @@ static bool InsertCall(JSContext* cx, unsigned argc, JS::Value* vp) {
   const Adjacent op = Adjacent(FunctionSlot(args));
   if (op == AdjacentHtml) {
     DomString markup;
-    if (!String(cx, args[1], &markup)) return false;
     State& state = *entry->owner;
+    if (!TrustedString(state, args[1], 0, "Element insertAdjacentHTML", &markup)) return false;
     if (!state.Check(state.model.InsertAdjacent(entry->key, position, markup))) return false;
     args.rval().setUndefined(); return true;
   }

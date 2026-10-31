@@ -148,6 +148,29 @@ void ParseOne(std::string_view text, const UrlValue& self, std::vector<Policy>* 
     for (const auto& existing : policy.directives) duplicate |= existing.name == entry.name;
     if (duplicate) continue;
     entry.kind = Kind(entry.name);
+    if (entry.name == "require-trusted-types-for" || entry.name == "trusted-types") {
+      for (size_t i = 1; i < tokens.size(); ++i) {
+        const auto& token = tokens[i];
+        bool valid = token == "'script'";
+        if (entry.name == "trusted-types") {
+          valid = token == "*" || token == "'none'" || token == "'allow-duplicates'";
+          if (!valid && !token.empty()) {
+            valid = true;
+            for (char c : token)
+              if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9') || c == '-' || c == '#' || c == '=' ||
+                    c == '_' || c == '/' || c == '@' || c == '.' || c == '%')) valid = false;
+          }
+        }
+        if (!valid) continue;
+        Source source;
+        source.kind = Source::Kind::Token;
+        source.value = source.text = token;
+        entry.sources.push_back(std::move(source));
+      }
+      policy.directives.push_back(std::move(entry));
+      continue;
+    }
     bool keywords_only_sample = true;
     for (size_t i = 1; i < tokens.size(); ++i) {
       Source source;
