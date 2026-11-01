@@ -1,9 +1,12 @@
 name: Wheels
 
-# Full native builds are opt-in on this fork. Each selected platform owns one
-# VM through dependency builds, packaging and installed-wheel tests.
-run-name: Wheels (${{ inputs.platform }})
+# Full native builds run on manual dispatch or version tags. Each selected
+# platform owns one VM through dependencies, packaging and installed-wheel tests.
+run-name: Wheels (${{ inputs.platform || 'all' }}, ${{ github.ref_name }})
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       platform:
@@ -19,7 +22,7 @@ on:
           - all
 
 concurrency:
-  group: wheels-${{ github.ref }}-${{ inputs.platform }}
+  group: wheels-${{ github.ref }}-${{ inputs.platform || 'all' }}
   cancel-in-progress: true
 
 permissions:
@@ -28,13 +31,13 @@ permissions:
 jobs:
   windows:
     name: Windows
-    if: inputs.platform == 'windows' || inputs.platform == 'windows-macos' || inputs.platform == 'all'
+    if: github.event_name == 'push' || inputs.platform == 'windows' || inputs.platform == 'windows-macos' || inputs.platform == 'all'
     uses: ./.github/workflows/build-windows.yml
   macos:
     name: macOS
-    if: inputs.platform == 'macos' || inputs.platform == 'windows-macos' || inputs.platform == 'all'
+    if: github.event_name == 'push' || inputs.platform == 'macos' || inputs.platform == 'windows-macos' || inputs.platform == 'all'
     uses: ./.github/workflows/build-macos.yml
   linux:
     name: Linux
-    if: inputs.platform == 'linux' || inputs.platform == 'all'
+    if: github.event_name == 'push' || inputs.platform == 'linux' || inputs.platform == 'all'
     uses: ./.github/workflows/build-linux.yml

@@ -80,8 +80,10 @@ git clone --recurse-submodules https://github.com/cutetailbud/ff-ruyijs
 The `firefox/` submodule is the official Firefox 159.0 release (`mozilla-firefox/firefox` at `FIREFOX_159_0_RELEASE`, a shallow clone). The workflows that build the PyPI wheels are the reference for a local build: [`.github/workflows/wheels.yml`](.github/workflows/wheels.yml) runs `ci/firefox/build.sh js|browser|toolchain` and `tools/build.py` on Windows and macOS, and the steps of `ci/linux/build.sh` on Linux.
 
 On this fork, pushes and pull requests run one small Ubuntu job for lint and
-Python/workflow tests. Native wheel builds are manual: select `linux`, `windows`,
-`macos`, `windows-macos`, or `all` in **Actions → Wheels → Run workflow**.
+Python/workflow tests. Native wheel builds run when pushing a `v*` version tag
+(all platforms), or manually: select `linux`, `windows`, `macos`, `windows-macos`,
+or `all` in **Actions → Wheels → Run workflow**. Publishing a GitHub Release for
+that tag does not start a second build.
 Each selected platform uses one VM for cached dependency builds, packaging and
 installed-wheel tests. See [fork CI](docs/ci.zh-CN.md) for cache behavior and CLI commands.
 
