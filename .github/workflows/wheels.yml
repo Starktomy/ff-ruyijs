@@ -1,22 +1,25 @@
 name: Wheels
 
-# Builds the ruyijs wheels for Windows x64, macOS arm64 and Linux x86_64 from
-# the official Firefox release pinned by the firefox/ submodule. Every platform
-# uploads its wheel as an artifact of this run; releases are cut from them.
+# Full native builds are opt-in on this fork. Each selected platform owns one
+# VM through dependency builds, packaging and installed-wheel tests.
+run-name: Wheels (${{ inputs.platform }})
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "assets/**"
-      - "docs/**"
-      - "site/**"
-      - "examples/**"
-      - "runtime.json"
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platforms to build (one VM per selected platform)
+        type: choice
+        required: true
+        default: linux
+        options:
+          - linux
+          - windows
+          - macos
+          - windows-macos
+          - all
 
 concurrency:
-  group: wheels-${{ github.ref }}
+  group: wheels-${{ github.ref }}-${{ inputs.platform }}
   cancel-in-progress: true
 
 permissions:
@@ -25,10 +28,13 @@ permissions:
 jobs:
   windows:
     name: Windows
+    if: inputs.platform == 'windows' || inputs.platform == 'windows-macos' || inputs.platform == 'all'
     uses: ./.github/workflows/build-windows.yml
   macos:
     name: macOS
+    if: inputs.platform == 'macos' || inputs.platform == 'windows-macos' || inputs.platform == 'all'
     uses: ./.github/workflows/build-macos.yml
   linux:
     name: Linux
+    if: inputs.platform == 'linux' || inputs.platform == 'all'
     uses: ./.github/workflows/build-linux.yml
