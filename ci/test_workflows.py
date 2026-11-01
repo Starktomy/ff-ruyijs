@@ -31,9 +31,8 @@ def condition(source, values):
 
 
 class WorkflowTests(unittest.TestCase):
-    def test_full_builds_are_manual_or_reusable_and_platform_selection_is_exact(self):
+    def test_manual_platform_selection_is_exact(self):
         wheels = workflow("wheels.yml")
-        self.assertEqual(set(wheels["on"]), {"workflow_dispatch"})
         selection = wheels["on"]["workflow_dispatch"]["inputs"]["platform"]
         self.assertEqual(selection["default"], "linux")
         expected = {
@@ -43,12 +42,25 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(set(selection["options"]), set(expected))
         for platform, selected in expected.items():
             actual = {name for name, job in wheels["jobs"].items()
-                      if condition(job["if"], {"inputs.platform": platform})}
+                      if condition(job["if"], {"inputs.platform": platform,
+                                               "github.event_name": "workflow_dispatch"})}
             self.assertEqual(actual, selected)
         for name, job in wheels["jobs"].items():
             self.assertEqual(job["uses"], f"./.github/workflows/build-{name}.yml")
             self.assertEqual(set(workflow(f"build-{name}.yml")["on"]),
                              {"workflow_call", "workflow_dispatch"})
+
+    def test_version_tags_build_all_platforms_without_branch_or_release_duplicates(self):
+        wheels = workflow("wheels.yml")
+        self.assertEqual(set(wheels["on"]), {"push", "workflow_dispatch"})
+        # A tag-only push filter excludes branch pushes. No release event is
+        # registered, so publishing a Release for the same tag cannot rebuild.
+        self.assertEqual(wheels["on"]["push"], {"tags": ["v*"]})
+        selected = {name for name, job in wheels["jobs"].items()
+                    if condition(job["if"], {"inputs.platform": "", "github.event_name": "push"})}
+        self.assertEqual(selected, {"windows", "macos", "linux"})
+        self.assertIn("github.ref", wheels["concurrency"]["group"])
+        self.assertIn("'all'", wheels["concurrency"]["group"])
 
     def test_each_selected_platform_uses_one_vm_with_the_installed_wheel_test(self):
         groups = set()

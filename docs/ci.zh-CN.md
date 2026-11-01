@@ -1,6 +1,6 @@
 # Fork CI 与按需构建
 
-普通提交使用快速检查，完整原生编译通过手动工作流运行。
+普通提交使用快速检查，完整原生编译由手动工作流或推送版本 tag 触发。
 
 | 操作 | 分配 VM | 内容 |
 | --- | --- | --- |
@@ -9,6 +9,8 @@
 | 手动 Wheels：linux／windows／macos | 1 台对应平台 | 依赖、原生引擎、wheel、安装后 smoke／网络检查 |
 | 手动 Wheels：windows-macos | 2 台 | Windows、macOS 各一台 |
 | 手动 Wheels：all | 3 台 | 三个平台各一台 |
+| 推送 `v*` tag，例如 `v0.3.1` | 3 台 | 自动构建该 tag 的三平台 wheel，每个平台一台 |
+| 发布已有 tag 的 GitHub Release | 0 | 使用 tag 构建产物，不重复编译 |
 
 自动 CI 不再安装 PyPI 旧版本执行 Windows 双版本 smoke；每个平台完整构建时，
 会继续测试本次源码生成的 wheel。自动检查不代替原生回归测试，修改 C++ 后仍需
@@ -33,8 +35,26 @@ gh workflow run wheels.yml --repo Starktomy/ff-ruyijs --ref main -f platform=all
 gh workflow run ci.yml --repo Starktomy/ff-ruyijs --ref main
 ```
 
-完整构建没有 push、PR 或定时触发器。同一分支的同平台新构建会取消仍在运行的
+完整构建只监听手动运行和 `v*` tag push，没有分支 push、PR、Release 或定时触发器。
+同一分支的同平台新构建会取消仍在运行的
 旧构建；不同平台使用不同并发组。快速 CI 也会取消被同一分支／PR 后续提交替代的运行。
+
+## 按 tag 发版
+
+推荐先更新 `pyproject.toml` 和 `python/ruyijs/_version.py` 中的版本号，提交代码，
+再给包含新版工作流的提交打版本 tag。以下仅示范命令，执行时使用本次真实版本号：
+
+```sh
+git tag v0.3.1
+git push fork v0.3.1
+```
+
+这次 tag push 会自动运行三平台完整构建，并使用 tag 对应的源码；普通 main 提交
+仍只跑快速 CI。构建成功后在 Actions artifacts 下载 wheel，可以用这个已存在的
+tag 创建 GitHub Release。创建或编辑 Release 不触发第二次编译。
+工作流只构建、验证并上传 Actions artifacts，发布 Release 附件和上传 PyPI 仍按需执行。
+首次直接在 Release 页面创建 tag 时，应确认对应 tag 的 Wheels 已触发，否则可手动
+选择该 tag 和 `all` 补跑。非 `v` 开头的 tag 不触发完整构建。
 
 ## 一个 VM 内的步骤
 
@@ -63,5 +83,5 @@ GitHub 若显示 “Workflows on this fork have been disabled”，可在仓库 
 恢复运行。若 API 仍返回 HTTP 422 “Actions has been disabled for this repository”，
 需先在该页面完成恢复，再使用上面的命令；更新 YAML 本身不会解除平台停用状态。
 
-工作流结构由 `ci/test_workflows.py` 检查，覆盖平台选择、单 VM 数量和缓存命中组合。
+工作流结构由 `ci/test_workflows.py` 检查，覆盖手动／版本 tag 路由、单 VM 数量和缓存命中组合。
 也可在本地使用 actionlint 检查 GitHub Actions 语法。
