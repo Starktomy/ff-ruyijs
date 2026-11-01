@@ -1,5 +1,6 @@
 // Get Trusted Type compliant input and the optional default-policy conversion.
 #include "web_trusted_types/internal.h"
+#include "jsapi.h"
 #include "js/CallAndConstruct.h"
 #include "js/Conversions.h"
 #include "js/Object.h"
