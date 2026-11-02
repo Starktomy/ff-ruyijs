@@ -1,6 +1,7 @@
 #include "runtime/secure_exposure.h"
 #include "runtime/user_activation_ports.h"
 #include "runtime/browsing_context.h"
+#include "browser_environment/cross_origin.h"
 #include "execution_scheduling/realm.h"
 #include "web_styling/computed_source.h"
 #include "document_model/exception.h"
@@ -737,6 +738,36 @@ bool Frames::DescendsFrom(const BrowsingContext* child, const BrowsingContext* a
     if (cursor == ancestor) return true;
   return false;
 }
+bool Frames::Initialize(BrowsingContext& child, BrowsingContext& parent, JS::HandleObject element) {
+  if (!child.Begin(&parent, element) || !child.Finish(*this)) return false;
+  child.observers->CopyPortsFrom(*parent.observers);
+  // The child realm runs its own timers/rAF/microtasks on this Context's one
+  // clock and queues, and its own fetch/XHR/Headers/Storage over this Context's
+  // one resource catalog and NetLog; both install before any child script can
+  // run, because the first load follows within the same structural change.
+  if (scheduling_ && !scheduling_(schedulingContext_, child)) return false;
+  if (resource_ && !resource_(resourceContext_, child)) return false;
+  child.document->CopyScriptPortFrom(*parent.document);
+  child.document->CopyFormPortsFrom(*parent.document);
+  // Child Location writes share the existing asynchronous frame-load path.
+  // Keep the live-context identity as the port target: a held Window belonging
+  // to a removed frame must not load into a later frame or the top-level page.
+  child.environment->SetNavigatePort([](void* context, const char* url, bool, bool) {
+    auto& target = *static_cast<BrowsingContext*>(context);
+    Frames& frames = *target.frames;
+    if (!frames.Live(target)) return true;
+    if (!frames.load_) {
+      JS_ReportErrorASCII(target.cx, "frame navigation requires the runtime coordinator");
+      return false;
+    }
+    return frames.load_(frames.loadContext_, target, url ? url : "");
+  }, &child);
+  child.environment->SetHashChangePort([](void* context, JS::HandleObject window,
+                                         const char* oldURL, const char* newURL) {
+    return static_cast<interaction::Realm*>(context)->FireHashChange(window, oldURL, newURL);
+  }, child.interaction.get());
+  return true;
+}
 bool Frames::Create(void* context, JS::HandleObject element, document_model::NodeKey key,
                     JS::MutableHandleObject window, JS::MutableHandleObject document) {
   auto& parent = *static_cast<BrowsingContext*>(context);
@@ -751,7 +782,7 @@ bool Frames::Create(void* context, JS::HandleObject element, document_model::Nod
   for (const auto& existing : self.children_) {
     if (existing->parent != &parent) continue;
     if (!SameNode(existing->frame_element, key)) continue;
-    window.set(existing->page);
+    window.set(browser_environment::WindowProxy(existing->page));
     document.set(existing->document->document());
     return !!document.get();
   }
@@ -764,41 +795,43 @@ bool Frames::Create(void* context, JS::HandleObject element, document_model::Nod
   auto child = std::make_unique<BrowsingContext>(cx, global);
   child->parent = &parent;
   child->frame_element = key;
-  if (!child->Begin(&parent, element) || !child->Finish(self)) return false;
-  child->observers->CopyPortsFrom(*parent.observers);
-  // The child realm runs its own timers/rAF/microtasks on this Context's one
-  // clock and queues, and its own fetch/XHR/Headers/Storage over this Context's
-  // one resource catalog and NetLog; both install before any child script can
-  // run, because the first load follows within the same structural change.
-  if (self.scheduling_ && !self.scheduling_(self.schedulingContext_, *child)) return false;
-  if (self.resource_ && !self.resource_(self.resourceContext_, *child)) return false;
-  child->document->CopyScriptPortFrom(*parent.document);
-  child->document->CopyFormPortsFrom(*parent.document);
-  // Child Location writes share the existing asynchronous frame-load path.
-  // Keep the live-context identity as the port target: a held Window belonging
-  // to a removed frame must not load into a later frame or the top-level page.
-  child->environment->SetNavigatePort([](void* context, const char* url, bool, bool) {
-    auto& target = *static_cast<BrowsingContext*>(context);
-    Frames& frames = *target.frames;
-    if (!frames.Live(target)) return true;
-    if (!frames.load_) {
-      JS_ReportErrorASCII(target.cx, "frame navigation requires the runtime coordinator");
-      return false;
-    }
-    return frames.load_(frames.loadContext_, target, url ? url : "");
-  }, child.get());
-  child->environment->SetHashChangePort([](void* context, JS::HandleObject window,
-                                         const char* oldURL, const char* newURL) {
-    return static_cast<interaction::Realm*>(context)->FireHashChange(window, oldURL, newURL);
-  }, child->interaction.get());
+  if (!self.Initialize(*child, parent, element)) return false;
   JS::RootedObject content(cx, child->document->document());
   if (!content) return false;
   // Assembly only: the structure notice links the element to this context and
   // then runs the first load through Navigate, so `srcdoc`/`src` already on the
   // element at insertion and later changes share one reader.
   self.children_.push_back(std::move(child));
-  window.set(global);
+  window.set(browser_environment::WindowProxy(global));
   document.set(content);
+  return true;
+}
+bool Frames::Advance(BrowsingContext& previous, BrowsingContext** created) {
+  *created = nullptr;
+  if (children_.size() + retired_.size() >= kLimit) {
+    JS_ReportErrorASCII(cx_, "iframe browsing context limit exceeded");
+    return false;
+  }
+  BrowsingContext& parent = *previous.parent;
+  JS::RootedObject element(cx_);
+  if (!parent.document->WrapNode(previous.frame_element, &element) || !element) return false;
+  JS::RootedObject global(cx_, CreatePage(cx_, previous.page));
+  if (!global) return false;
+  const size_t retained = retired_.size();
+  retired_.push_back(std::make_unique<BrowsingContext>(cx_, global));
+  BrowsingContext& next = *retired_.back();
+  next.parent = &parent;
+  next.frame_element = previous.frame_element;
+  if (!Initialize(next, parent, element) ||
+      !next.environment->AdoptWindow(*previous.environment)) return false;
+  JS::RootedObject window(cx_, browser_environment::WindowProxy(global));
+  JS::RootedObject document(cx_, next.document->document());
+  if (!document || !parent.document->UpdateFrame(next.frame_element, window, document)) return false;
+  auto ready = std::move(retired_[retained]);
+  retired_.erase(retired_.begin() + retained);
+  Retire(&previous);
+  children_.push_back(std::move(ready));
+  *created = &next;
   return true;
 }
 bool Frames::Navigate(void* context, JS::HandleObject element, document_model::NodeKey key,
@@ -819,7 +852,9 @@ bool Frames::Navigate(void* context, JS::HandleObject element, document_model::N
         !self.LoadChild(parent, target, reference, &loaded)) return false;
     // A first load without a target keeps the about:blank document, which
     // completes during insertion (Firefox fires the element `load` there).
-    return loaded || !initial || self.CompleteBlank(target);
+    if (loaded) return true;
+    if (!initial && self.load_) return self.load_(self.loadContext_, target, "about:blank");
+    return self.CompleteBlank(target);
   }
   return true;
 }
@@ -846,6 +881,7 @@ void Frames::Retire(const BrowsingContext* ancestor) {
     if (DescendsFrom(child.get(), ancestor)) {
       child->interaction->RetireCloseWatchers();
       child->workers->Stop();
+      if (child->moduleSession) child->moduleSession->Retire();
       child->document->SetScriptPort(nullptr,nullptr);
       child->document->SetFormPorts(nullptr,nullptr,nullptr);
       child->document->RetireImageLoads();

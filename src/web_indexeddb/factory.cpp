@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 #include "web_indexeddb/state.h"
 #include "js/Array.h"
 #include "js/Conversions.h"
@@ -7,7 +8,7 @@
 namespace ruyijs::web_indexeddb {
 bool FactoryGet(JSContext* cx,unsigned n,JS::Value* vp) {
   auto args=JS::CallArgsFromVp(n,vp);auto& s=*static_cast<State*>(WebKit::Owner(args));
-  if (!args.thisv().isObject() || &args.thisv().toObject()!=s.kit.page)
+  if (!args.thisv().isObject() || browser_environment::WindowGlobal(&args.thisv().toObject())!=s.kit.page)
     return WebKit::Fail(cx,"Window.indexedDB called on an incompatible receiver");
   args.rval().setObject(*s.factory);return true;
 }

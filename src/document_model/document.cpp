@@ -1,5 +1,6 @@
 #include "runtime/cf_access_log.h"
 #include "document_model/state.h"
+#include "browser_environment/cross_origin.h"
 #include "document_model/foreign_adoption.h"
 #include "document_model/collections.h"
 #include "document_model/traversal.h"
@@ -64,7 +65,8 @@ static bool Get(JSContext* cx, unsigned argc, JS::Value* vp) {
   // receiver still throws from the same place and records nothing.
   state.Observe("Document", FieldName(field), int(ApiAccess::Read));
   if (field == Location || field == View) {
-    args.rval().setObjectOrNull(main ? field == Location ? state.environment.location() : state.page.get() : nullptr);
+    args.rval().setObjectOrNull(main ? field == Location ? state.environment.location() :
+        browser_environment::WindowProxy(state.page) : nullptr);
     return true;
   }
   DocumentSnapshot value;

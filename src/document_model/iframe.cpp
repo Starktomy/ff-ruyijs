@@ -125,6 +125,12 @@ void SourceChanged(void* context, DocumentId document, NodeKey key, DomStringVie
   if (document != state.main.document) return;
   if (name != DomStringView(u"src") && name != DomStringView(u"srcdoc")) return;
   if (!state.frameNavigate || !FindFrame(state, key)) return;
+  // With srcdoc present, src is only the fallback and cannot navigate/reload
+  // the active inline document.
+  if (name == DomStringView(u"src")) {
+    std::optional<DomString> inlineSource;
+    if (!state.Check(state.model.GetAttribute(key, u"srcdoc", &inlineSource)) || inlineSource) return;
+  }
   JS::RootedValue value(state.cx);
   if (!state.Wrap(key, &value) || !value.isObject()) return;
   JS::RootedObject element(state.cx, &value.toObject());
@@ -210,5 +216,12 @@ void Realm::SetFrameLifecycle(FrameCreate create, FrameDiscard discard, FrameNav
   state_->frameDiscard = discard;
   state_->frameNavigate = navigate;
   state_->frameContext = context;
+}
+bool Realm::UpdateFrame(NodeKey key, JS::HandleObject window, JS::HandleObject document) {
+  FrameLink* link = FindFrame(*state_, key);
+  if (!link) return false;
+  link->window = window;
+  link->document = document;
+  return true;
 }
 }  // namespace ruyijs::document_model

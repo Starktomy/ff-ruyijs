@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 // TrustedTypePolicyFactory: the one per-realm `trustedTypes` object.
 // Behaviour follows TrustedTypePolicyFactory.cpp, including receiver realm and CSP policy names.
 #include "web_trusted_types/internal.h"
@@ -164,7 +165,7 @@ bool Global(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   State& state = Self(args);
   if (args.thisv().isObject() &&
-      js::CheckedUnwrapStatic(&args.thisv().toObject()) != state.kit.page.get())
+      browser_environment::WindowGlobal(&args.thisv().toObject()) != state.kit.page.get())
     return Fail(cx, "'get trustedTypes' called on an object that does not implement interface Window.");
   args.rval().setObject(*state.factory);
   return JS_WrapValue(cx, args.rval());

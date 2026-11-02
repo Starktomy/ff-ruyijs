@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 // getComputedStyle and the declaration views (T17): the computed block and a
 // CSS rule's style. The cascade runs in the imported styling owner; this file
 // turns an Element into the domain's cascade input, serializes the result into
@@ -169,7 +170,7 @@ bool GetComputedStyle(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   State& state = *detail::Self(args);
   bool is_page = args.thisv().isUndefined() ||
-                 (args.thisv().isObject() && &args.thisv().toObject() == state.page);
+                 (args.thisv().isObject() && browser_environment::WindowGlobal(&args.thisv().toObject()) == state.page);
   if (!is_page) return WebKit::Fail(cx, "getComputedStyle called on an incompatible receiver");
   if (!state.chainPort || !state.sheetsPort)
     return WebKit::Fail(cx, "getComputedStyle is not available");
@@ -192,7 +193,7 @@ bool GetDefaultComputedStyle(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   State& state = *detail::Self(args);
   bool is_page = args.thisv().isUndefined() ||
-                 (args.thisv().isObject() && &args.thisv().toObject() == state.page);
+                 (args.thisv().isObject() && browser_environment::WindowGlobal(&args.thisv().toObject()) == state.page);
   if (!is_page) return WebKit::Fail(cx, "'getDefaultComputedStyle' called on an object that does not implement interface Window.");
   if (args.length() == 0)
     return WebKit::Fail(cx, "Window.getDefaultComputedStyle: At least 1 argument required, but only 0 passed");

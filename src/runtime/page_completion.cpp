@@ -15,7 +15,7 @@ namespace ruyijs {
 namespace {
 // A frame navigation task uses the same shape (Url set), so the parent's
 // completion reads it as the child's pending token through CompletionPending.
-enum Slot { Loader, Page, Document, Generation, Frame, Done, Callback, Url, Count };
+enum Slot { Loader, Page, Document, Generation, Frame, Done, Callback, Url, InlineDocument, Count };
 const JSClass kCompletion = {"Document completion task", JSCLASS_HAS_RESERVED_SLOTS(Count)};
 bool CompletionPending(JSContext* cx, JS::HandleObject task, execution_scheduling::Realm& scheduling) {
   if (JS::GetReservedSlot(task, Done).toBoolean()) return false;
@@ -101,7 +101,7 @@ bool PageLoad::Complete(JS::HandleObject task) {
   return !frame || document.ScriptGeneration() != generation ||
          scheduling_.Retired(page) || FireFrameElementLoad(*target);
 }
-bool PageLoad::QueueFrameLoad(BrowsingContext& target, const std::string& url) {
+bool PageLoad::QueueFrameLoad(BrowsingContext& target, const std::string& url, bool inlineDocument) {
   JSAutoRealm realm(cx_, target.page);
   JS::RootedObject task(cx_, JS_NewObjectWithGivenProto(cx_, &kCompletion, nullptr));
   JS::RootedFunction fn(cx_, js::NewFunctionWithReserved(cx_, DeliverFrameLoad, 0, 0,
@@ -117,6 +117,7 @@ bool PageLoad::QueueFrameLoad(BrowsingContext& target, const std::string& url) {
   JS::SetReservedSlot(task, Done, JS::BooleanValue(false));
   JS::SetReservedSlot(task, Callback, JS::ObjectValue(*callback));
   JS::SetReservedSlot(task, Url, JS::StringValue(href));
+  JS::SetReservedSlot(task, InlineDocument, JS::BooleanValue(inlineDocument));
   js::SetFunctionNativeReserved(callback, 0, JS::ObjectValue(*task));
   if (!scheduling_.PostTask(callback)) return false;
   target.loadCompletion = task;
@@ -142,7 +143,8 @@ bool PageLoad::RunFrameLoad(JS::HandleObject task) {
   if (!ToUTF8(cx_, href, &url)) return false;
   // As before, a child document that cannot load does not fail the task queue
   // (Firefox reports an element `error`, D8).
-  if (!LoadFrame(*target, url)) JS_ClearPendingException(cx_);
+  const bool inlineDocument = JS::GetReservedSlot(task, InlineDocument).toBoolean();
+  if (!(inlineDocument ? LoadFrameHtml(*target, url) : LoadFrame(*target, url))) JS_ClearPendingException(cx_);
   return true;
 }
 bool PageLoad::WaitForCompletion(JS::HandleObject task) {

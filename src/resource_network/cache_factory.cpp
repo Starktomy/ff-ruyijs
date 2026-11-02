@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 #include "resource_network/cache.h"
 #include "resource_network/request.h"
 #include "runtime/page_helpers.h"
@@ -28,7 +29,7 @@ bool Illegal(JSContext* cx,unsigned argc,JS::Value* vp) {
 bool Caches(JSContext* cx,unsigned argc,JS::Value* vp) {
   auto args=JS::CallArgsFromVp(argc,vp);
   State& state=*static_cast<State*>(WebKit::Owner(args));
-  JS::RootedObject self(cx,args.thisv().isObject()?js::CheckedUnwrapStatic(&args.thisv().toObject()):nullptr);
+  JS::RootedObject self(cx,args.thisv().isObject()?browser_environment::WindowGlobal(&args.thisv().toObject()):nullptr);
   if (self!=state.page) return Error(cx,"'get caches' called on an incompatible receiver.");
   if (!state.cacheStorageObject) {
     JSAutoRealm realm(cx,state.page);

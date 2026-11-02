@@ -98,10 +98,9 @@ class PageLoad final {
   // child's scripts start on their own stack. The queued task is the child's
   // completion token, so the parent's `load` waits for it; a newer load of the
   // same frame or the frame's retirement makes it do nothing.
-  bool QueueFrameLoad(BrowsingContext& target, const std::string& url);
-  // The same load path with the markup handed in directly, for an iframe
-  // `srcdoc` document: the child commits `about:srcdoc` (origin inherited from
-  // its creator) and the one parser produces the inline document.
+  bool QueueFrameLoad(BrowsingContext& target, const std::string& url, bool inlineDocument = false);
+  // The same commit path with inline markup for `srcdoc`: called by the queued
+  // frame navigation task, with origin inherited from its creator.
   bool LoadFrameHtml(BrowsingContext& target, const std::string& html);
   // A newly connected frame whose first load has no target keeps its
   // about:blank document; this completes it by firing the frame element's

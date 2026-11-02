@@ -98,32 +98,36 @@ inline NodeId DocumentAggregate::active_element_id() const noexcept {
   if (const NodeId focused = focused_id()) return focused;
   return mode_ == DocumentMode::Html ? body_id() : document_element_id();
 }
-inline DomString DocumentAggregate::title16() const {
-  if (!uses_html_syntax()) return {};
-  const NodeId head = head_id();
-  if (!head) return {};
-  for (NodeId child : require(head).child_ids()) {
+inline NodeId DocumentAggregate::title_element_id() const {
+  std::vector<NodeId> pending{id()};
+  while (!pending.empty()) {
+    const NodeId child = pending.back();
+    pending.pop_back();
     const auto* element = get_element(child);
     if (element && element->tag_name().html() && element->tag_name().local16() == u"title")
-      return normalize_title_text(text_content16(child));
+      return child;
+    const auto& children = require(child).child_ids();
+    pending.insert(pending.end(), children.rbegin(), children.rend());
   }
-  return {};
+  return 0;
+}
+inline DomString DocumentAggregate::title16() const {
+  if (!uses_html_syntax()) return {};
+  const NodeId title = title_element_id();
+  return title ? normalize_title_text(text_content16(title)) : DomString{};
 }
 inline void DocumentAggregate::set_title16(DomStringView value) {
   if (mode_ != DocumentMode::Html) return;
+  if (const NodeId title = title_element_id()) {
+    set_text_content16(title, value);
+    return;
+  }
   NodeId head = head_id();
   if (!head) {
     const NodeId root = document_element_id();
     if (!root) return;
     head = create_element16(u"head");
     insert_before(root, head, require(root).first_child_id());
-  }
-  for (NodeId child : require(head).child_ids()) {
-    const auto* element = get_element(child);
-    if (element && element->tag_name().html() && element->tag_name().local16() == u"title") {
-      set_text_content16(child, value);
-      return;
-    }
   }
   const NodeId title = create_element16(u"title");
   try {

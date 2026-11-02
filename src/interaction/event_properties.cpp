@@ -1,4 +1,5 @@
 #include "interaction/internal.h"
+#include "browser_environment/cross_origin.h"
 #include "js/PropertyAndElement.h"
 #include "js/Conversions.h"
 
@@ -38,8 +39,8 @@ static bool Get(JSContext* cx, unsigned argc, JS::Value* vp, Property property,
   state->Observe("Event", PropertyName(property), int(ApiAccess::Read));
   switch (property) {
     case Type: args.rval().setString(event->type); break;
-    case TargetValue: args.rval().setObjectOrNull(state->targetObject(value.target_id())); break;
-    case CurrentTarget: args.rval().setObjectOrNull(state->targetObject(value.current_target_id())); break;
+    case TargetValue: args.rval().setObjectOrNull(browser_environment::WindowProxy(state->targetObject(value.target_id()))); break;
+    case CurrentTarget: args.rval().setObjectOrNull(browser_environment::WindowProxy(state->targetObject(value.current_target_id()))); break;
     case Phase: args.rval().setInt32(static_cast<int>(value.event_phase())); break;
     case Bubbles: args.rval().setBoolean(value.bubbles()); break;
     case Cancelable: args.rval().setBoolean(value.cancelable()); break;

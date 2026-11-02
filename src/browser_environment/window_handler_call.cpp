@@ -1,4 +1,5 @@
 #include "browser_environment/window_handlers.h"
+#include "browser_environment/cross_origin.h"
 #include "jsfriendapi.h"
 #include "js/CallAndConstruct.h"
 #include "js/Conversions.h"
@@ -44,7 +45,7 @@ bool WindowHandlerResult(JSContext* cx, JS::HandleObject store, unsigned index,
     for (unsigned i = 1; i < 5; ++i)
       if (!Call(cx, store, kHandlerErrorMessage + i, event, JS::HandleValueArray::empty(), arguments[i])) return false;
   } else arguments[0].setObject(*event);
-  JS::RootedValue receiver(cx, JS::ObjectValue(*window)), result(cx);
+  JS::RootedValue receiver(cx, JS::ObjectValue(*WindowProxy(window))), result(cx);
   if (!JS::Call(cx, receiver, function, JS::HandleValueArray::subarray(arguments, 0, error ? 5 : 1), &result)) return false;
   bool cancel = result.isBoolean() && result.toBoolean() == error;
   if (before) {

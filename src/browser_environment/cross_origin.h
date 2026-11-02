@@ -12,14 +12,18 @@
 
 namespace ruyijs::browser_environment {
 struct State;
+// Native owners use the inner Window; scripts keep its stable WindowProxy.
+JSObject* WindowGlobal(JSObject* object);
+JSObject* WindowProxy(JSObject* object);
+bool InstallWindowProxy(State& state);
 void RegisterWindow(State* state);
 void UnregisterWindow(State* state);
 State* WindowState(JSObject* global);
 // True when `viewer` and `target` (window globals) are same origin; a global
 // that is not a registered window (the host's own realm) sees everything.
 bool SameOriginWindows(JSContext* cx, JSObject* viewer, JSObject* target, bool* same);
-// `target` as `viewer` sees it: itself when same origin, else its one
-// cross-origin WindowProxy. A null viewer means the current global.
+// The stable WindowProxy of `target`. Its handler checks the current caller's
+// origin on every access, including after a document navigation.
 bool WindowView(JSContext* cx, JSObject* viewer, JS::HandleObject target, JS::MutableHandleValue out);
 // Host-supplied code (RPC eval, input target expressions, the CLI) is marked
 // when compiled. While such a script is the innermost one running, the

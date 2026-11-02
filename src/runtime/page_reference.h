@@ -7,7 +7,7 @@ namespace ruyijs {
 enum class PageReference : unsigned { Crypto, Geolocation, ResourceStrategyPrototypes,
                                      ResourceStreamPrototypes, ResourceWritablePrototypes, ResourceTransformPrototype, ResourceTransformConstructor, PlatformBodyFactories, PlatformDecoderStreamPrototype,
                                      PlatformCompressionPrototype, PlatformDecompressionPrototype, MediaImageFactories, ResourceTransportPrototypes,
-                                     Frames, Count };
+                                     CustomElementsRegistry, Frames, Count };
 bool ReadPageReference(JS::HandleObject page, PageReference, JS::MutableHandleValue);
 bool WritePageReference(JS::HandleObject page, PageReference, JS::HandleValue);
 // The document-ordered child browsing contexts of a Window, for its indexed

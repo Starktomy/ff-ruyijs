@@ -1,4 +1,5 @@
 #include "document_model/state.h"
+#include "browser_environment/cross_origin.h"
 #include "runtime/weak_object.h"
 #include "document_model/sanitizer.h"
 #include "document_model/traversal.h"
@@ -176,7 +177,7 @@ Realm::~Realm() = default;
 static bool DocumentGetter(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   State* state = FunctionState(args);
-  if (!args.thisv().isObject() || &args.thisv().toObject() != state->page)
+  if (!args.thisv().isObject() || browser_environment::WindowGlobal(&args.thisv().toObject()) != state->page)
     return TypeError(cx, "Window receiver is incompatible");
   return state->Wrap(state->main, args.rval());
 }

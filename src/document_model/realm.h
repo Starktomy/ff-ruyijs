@@ -134,6 +134,7 @@ class Realm final {
   // driven by the unique tree's own structural-change notices.
   void SetFrameLifecycle(FrameCreate create, FrameDiscard discard, FrameNavigate navigate,
                          void* context);
+  bool UpdateFrame(NodeKey key, JS::HandleObject window, JS::HandleObject document);
   // Bound by the shared coordinator after installation; cleared before teardown.
   void SetApiMonitor(ApiMonitorPort port, void* context);
   // HTMLMediaElement stores its MediaKeys attachment in the Document Model;

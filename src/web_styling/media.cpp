@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 // matchMedia and MediaQueryList (T17). The matches value is evaluated on every
 // access from the original browsing context's viewport and screen sources,
 // without a second display state or a change notification (D37).
@@ -77,7 +78,7 @@ bool MatchMedia(JSContext* cx, unsigned argc, JS::Value* vp) {
   if(!argc) return WebKit::Fail(cx,"matchMedia requires a query");
   State& state = *detail::Self(args);
   bool is_page = args.thisv().isUndefined() ||
-                 (args.thisv().isObject() && &args.thisv().toObject() == state.page);
+                 (args.thisv().isObject() && browser_environment::WindowGlobal(&args.thisv().toObject()) == state.page);
   if (!is_page) return WebKit::Fail(cx, "matchMedia called on an incompatible receiver");
   std::string query;
   if (!detail::ToAscii(cx, args.get(0), &query)) return false;
