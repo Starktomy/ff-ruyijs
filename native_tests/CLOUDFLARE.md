@@ -27,6 +27,22 @@ difference for serial CapSkip. The ablation report includes the full table and
 measurement boundaries. Passing the earlier ablation samples does not establish
 equivalent reliability or efficiency.
 
+## Upstream 0.3.1 rebase validation
+
+2026-11-02, rebased onto upstream `bcdcf72`. All 49 fork commits were retained,
+including the previously uncommitted XHR Blob and document-navigation fixes.
+The integration additionally isolates Trusted Types registries/CSP callbacks and
+the WindowProxy class cache per Engine session thread.
+
+The rebuilt Linux runtime passes 127 native tests and upstream smoke, atob,
+direct/proxy network, Firefox 159 ClientHello and shared Engine checks. The
+original CapSkip page passes backend verification in 12.203 s. The generic API
+also works inside `use_engine(engine)`: a 624-character token in 2.657 s, followed
+by a successful verification at CapSkip's backend. DataDome Device Check and
+protected guide HTML access still succeed without a captured JSError.
+See [the integration report](../docs/upstream-sync-20261102.zh-CN.md) for the
+runtime hash, console diagnostics, timing boundaries and platform limits.
+
 ## Upstream 0.3.0 rebase validation
 
 2026-11-01, runtime and test sources at `3e64250`, based on upstream `d32dd74`.

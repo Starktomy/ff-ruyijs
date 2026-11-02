@@ -122,3 +122,13 @@ Diagnostic scripts and complete reports are in ignored `artifacts/datadome-debug
 `final.json`, `final.html`, `cloudflare-final.json`, `lifecycle-targeted-final.log`,
 `native-final.log` and `smoke-final.log`. The final acceptance run installed no
 diagnostic wrappers and did not modify vendor scripts.
+
+## Upstream 0.3.1 rebase regression
+
+2026-11-02, upstream `bcdcf72` plus the retained fork fixes and Engine integration
+fix `26769e1`: a fresh direct Context receives the initial 403, completes the
+Device Check POST with HTTP 200, then fetches the canonical guide with HTTP 200
+and 209105 characters of protected HTML. No JSError is captured. The 3.430-second
+diagnostic is one access check, not a performance comparison. All 127 native
+tests pass, including the new concurrent Engine lifecycle/policy regression.
+See [the integration report](../docs/upstream-sync-20261102.zh-CN.md) for details.
