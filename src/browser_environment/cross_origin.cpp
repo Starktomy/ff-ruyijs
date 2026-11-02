@@ -61,7 +61,7 @@ JSObject* WindowProxy(JSObject* object) {
 bool InstallWindowProxy(State& state) {
   JSContext* cx = state.cx;
   JSAutoRealm realm(cx, state.page);
-  static const JSClass* clasp = nullptr;
+  thread_local const JSClass* clasp = nullptr;
   if (!clasp) {
     JS::RootedObject sample(cx, NewShellWindowProxy(cx, state.page));
     if (!sample) return false;

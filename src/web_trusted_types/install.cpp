@@ -1,5 +1,5 @@
 // The one production installer of the Trusted Types owner for a Window or
-// Worker realm, and the process-wide HostGetCodeForEval registration.
+// Worker realm, and the thread's HostGetCodeForEval registration.
 #include "web_trusted_types/internal.h"
 #include "runtime/page_helpers.h"
 #include "jsapi.h"
@@ -14,10 +14,10 @@
 namespace ruyijs::web_trusted_types {
 namespace {
 std::vector<State*>& Registry() {
-  static std::vector<State*> states;
+  thread_local std::vector<State*> states;
   return states;
 }
-JSCSPEvalChecker previous = nullptr;
+thread_local JSCSPEvalChecker previous = nullptr;
 bool MatchesScript(JSContext* cx, JS::HandleValue input, JS::HandleString text, bool* matches) {
   *matches = IsTrustedValue(input, Kind::Script);
   if (!*matches || !text) return true;
