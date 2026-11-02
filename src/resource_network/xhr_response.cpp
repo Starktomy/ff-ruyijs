@@ -1,4 +1,6 @@
 #include "resource_network/xhr.h"
+#include "domain/resource_network/cors.h"
+#include "web_platform/body_factories.h"
 #include "js/ArrayBuffer.h"
 #include "js/Exception.h"
 #include "js/JSON.h"
@@ -44,13 +46,29 @@ bool XhrResponse(JSContext* cx, JS::HandleObject self, XhrMember member,
         if (!JS_IsExceptionPending(cx) || JS_IsThrowingOutOfMemory(cx)) return false;
         JS_ClearPendingException(cx); cached.setNull();
       }
+    } else if (r.responseType == "blob" && r.response.status) {
+      // Use the original realm's native Blob factory, independently of public
+      // constructor replacements. HTTP error bodies are still valid responses.
+      JS::RootedObject factories(cx), blob(cx);
+      std::string mime = r.mime;
+      if (mime.empty()) {
+        for (const auto& [name, value] : r.response.headers)
+          if (domain::resource_network::lower_header_name(name) == "content-type") {
+            mime = value;
+            break;
+          }
+      }
+      if (!web_platform::BodyFactories(cx, r.owner->page, &factories) ||
+          !web_platform::BodyBlob(cx, factories, r.response.body,
+              domain::resource_network::mime_essence(mime), &blob)) return false;
+      cached.setObject(*blob);
     } else cached.setNull();
     JS::RootedValue stored(cx, cached);
     JSAutoRealm realm(cx, self);
     if (!JS_WrapValue(cx, &stored)) return false;
     JS::SetReservedSlot(self, XResponseCache, stored);
   }
-  // Public blob/document response values are null placeholders.
+  // Document responses remain null until a response-document parser is bound.
   if (!JS_WrapValue(cx, &cached)) return false;
   result.set(cached);
   return true;
