@@ -9,6 +9,24 @@ remain available as historical references. See [README.md](README.md) for the
 current regression-test setup. Measurements below retain their original
 commit IDs and runtime descriptions.
 
+The 2026-11-01 native ablation experiments now distinguish compatibility
+requirements from the earlier cumulative fixes. Removing Trusted Types, or
+any one of its HTML/Script/ScriptURL default conversions, failed all three
+attempts in both CapSkip paths. Removing the other 14 compatibility behaviors
+together still verified 3/3 in both paths. Upstream native sources with only
+the Trusted Types patch also verified 3/3 in both paths, with much slower
+full-page execution. See [the ablation report](../docs/cloudflare-ablation.zh-CN.md)
+for controls, cross-site backend results, NOL's separate script dependency,
+shared build inputs and the limits of these observations.
+
+A subsequent alternating process-tree resource comparison returned tokens in
+29/29 calls on the full fork and 27/29 on upstream + Trusted Types (two 30 s
+timeouts). The full fork used less sampled PSS and CPU per successful token;
+latency favored the full fork in most measured groups, with a small reverse
+difference for serial CapSkip. The ablation report includes the full table and
+measurement boundaries. Passing the earlier ablation samples does not establish
+equivalent reliability or efficiency.
+
 ## Upstream 0.3.0 rebase validation
 
 2026-11-01, runtime and test sources at `3e64250`, based on upstream `d32dd74`.
