@@ -108,10 +108,11 @@ class DocumentAggregate : public shared::AggregateRoot<NodeId> {
   void set_ready_state(ReadyState state) noexcept { ready_state_ = state; }
   // Main URL uses an external port; cloned documents own immutable URI snapshots.
   // Legacy cookie metadata is retained but is not a production cookie owner.
-  // document.title: the child text content of the head's first title element.
+  // document.title: the first HTML title in document tree order.
   // HTML documents only; the tree is the only source, so set_title16 creates the
   // element (and a head, when the html element exists) if it is missing.
   DomString title16() const;
+  NodeId title_element_id() const;
   void set_title16(DomStringView value);
   std::string url() const { return url_ ? to_utf8(*url_) : std::string{}; }
   void set_url(std::string value) { url_ = from_utf8(value); }

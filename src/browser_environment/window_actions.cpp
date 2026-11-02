@@ -33,7 +33,7 @@ State* Receiver(JSContext* cx, const JS::CallArgs& args, int32_t* slot) {
   // (dom/bindings/BindingUtils.cpp:2863-2874), which this window is. Any other
   // non-matching receiver is still rejected.
   bool is_page = args.thisv().isNullOrUndefined() ||
-                 (args.thisv().isObject() && &args.thisv().toObject() == state->page);
+                 (args.thisv().isObject() && WindowGlobal(&args.thisv().toObject()) == state->page);
   if (!state || !is_page) {
     WebKit::FailBrand(cx, args, "Window");
     return nullptr;

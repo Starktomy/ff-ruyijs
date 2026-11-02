@@ -31,6 +31,7 @@ bool TopLevel::Advance(BrowsingContext** created) {
   // Scheduling and resource surfaces over this Context's one clock, queues,
   // catalog and NetLog, before any script of the new document can run.
   if (!next.BeginSuccessor(previous) || !next.Finish(*previous.frames)) return false;
+  if (!next.environment->AdoptWindow(*previous.environment)) return false;
   next.observers->CopyPortsFrom(*previous.observers);
   if (!scheduling_.Run(next) || !resource_.Run(next)) return false;
   next.document->CopyScriptPortFrom(*previous.document);

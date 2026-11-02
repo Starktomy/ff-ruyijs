@@ -1,5 +1,6 @@
 #include "document_model/selection.h"
 #include "document_model/state.h"
+#include "browser_environment/cross_origin.h"
 #include "runtime/page_helpers.h"
 #include "js/Object.h"
 #include "js/PropertyAndElement.h"
@@ -12,7 +13,7 @@ bool Get(JSContext* cx, unsigned argc, JS::Value* vp) {
   State& state = *FunctionState(args);
   const bool document = FunctionSlot(args) == 1;
   JS::RootedObject receiver(cx, args.thisv().isObject()
-      ? js::CheckedUnwrapStatic(&args.thisv().toObject()) : nullptr);
+      ? browser_environment::WindowGlobal(&args.thisv().toObject()) : nullptr);
   if (document) {
     if (!DocumentReceiver(cx, receiver)) return false;
     state.Observe("Document", "getSelection", int(ApiAccess::Call));

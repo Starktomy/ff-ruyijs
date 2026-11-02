@@ -121,9 +121,9 @@ struct BrowsingContext {
   // before the Interaction owner its AbortSignal state points at. Null on the
   // main page, whose realm owns the shared state instead.
   std::unique_ptr<resource_network::Realm> resources;
-  // Parser module records are scoped to this document generation. A reload in
-  // an iframe reuses its BrowsingContext, so prior sessions stay rooted here
-  // until the realm itself is destroyed while the active pointer advances.
+  // Parser module records are scoped to this document generation. A host load
+  // may replace the parser in place; retain its prior sessions until the realm
+  // dies. A document navigation instead assembles a fresh BrowsingContext.
   std::unique_ptr<ModuleSession> moduleSession;
   std::vector<std::unique_ptr<ModuleSession>> retiredModuleSessions;
   resource_network::Realm* navigatorNetwork = nullptr;  // Non-owning per-context port.
@@ -187,8 +187,10 @@ class Frames final {
   // is itself retired by a navigation.
   void RetireUnder(BrowsingContext& top);
   BrowsingContext* FindDocument(const document_model::Realm& document) const;
+  // Replace an iframe document's owners, preserving its public WindowProxy.
+  bool Advance(BrowsingContext& previous, BrowsingContext** created);
   // True while `context` is the live context of its frame element: not yet
-  // retired by the element leaving the tree.
+  // retired by a document navigation or the element leaving the tree.
   bool Live(const BrowsingContext& context) const;
   // Borrow the original traversable owner; source identity may come from a
   // wrapper created in a retired realm and later adopted into a current one.
@@ -225,6 +227,7 @@ class Frames final {
   static constexpr size_t kLimit = 64;
   // True when `child` is `ancestor` or was created inside its frame subtree.
   static bool DescendsFrom(const BrowsingContext* child, const BrowsingContext* ancestor);
+  bool Initialize(BrowsingContext& child, BrowsingContext& parent, JS::HandleObject element);
   // Resolves a frame `src` against the parent document URL and loads it into
   // the child's existing context through the one page-load coordinator. A
   // reference that is missing or does not resolve to an absolute HTTP(S) URL

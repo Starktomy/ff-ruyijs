@@ -1,4 +1,7 @@
 #include "document_model/state.h"
+#include "runtime/page_helpers.h"
+#include "runtime/page_reference.h"
+#include "browser_environment/cross_origin.h"
 #include "js/Conversions.h"
 #include "js/Object.h"
 #include "js/Promise.h"
@@ -10,6 +13,16 @@
 namespace ruyijs::document_model {
 namespace {
 enum Operation { Define, Get, WhenDefined, Upgrade, GetName };
+
+bool Registry(JSContext* cx, unsigned argc, JS::Value* vp) {
+  auto args = JS::CallArgsFromVp(argc, vp);
+  State& state = *FunctionState(args);
+  JS::RootedObject receiver(cx, args.thisv().isNullOrUndefined() ? state.page.get()
+      : args.thisv().isObject() ? browser_environment::WindowGlobal(&args.thisv().toObject()) : nullptr);
+  if (!ReadPageReference(receiver, PageReference::CustomElementsRegistry, args.rval()))
+    return TypeError(cx, "Window receiver is incompatible");
+  return JS_WrapValue(cx, args.rval());
+}
 
 JSObject* Receiver(JSContext* cx, const JS::CallArgs& args, State& state) {
   JSObject* object = args.thisv().isObject()
@@ -68,7 +81,9 @@ bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
   }
   if (!argc) return TypeError(cx, "CustomElementRegistry method requires a name");
   DomString name;
-  if (!Name(cx, args[0], &name)) return false;
+  // get() looks up any DOMString, including ordinary HTML tag names. Unlike
+  // define()/whenDefined(), an unknown non-custom name is not an error.
+  if (op == Get ? !String(cx, args[0], &name) : !Name(cx, args[0], &name)) return false;
   if (op == Get || op == WhenDefined) {
     if (auto* entry = Find(state, name)) {
       if (op == Get) args.rval().setObject(*entry->constructor->get());
@@ -132,8 +147,14 @@ bool InstallCustomElements(State& state) {
   state.customElements->internals = JS::NewWeakMapObject(cx);
   if (!state.customElements->internals) return false;
   JS::RootedValue value(cx, JS::ObjectValue(*object));
-  return JS_DefineProperty(cx, state.page, "customElements", value,
-                           JSPROP_ENUMERATE | JSPROP_PERMANENT) &&
+  JS::RootedObject getter(cx, state.Function(Registry, "get customElements", 0, 0));
+  JS::RootedObject setter(cx);
+  // Window.webidl: a regular readonly attribute, not LegacyUnforgeable.
+  // Polyfills may delete/replace the public property; the native registry and
+  // borrowed getter still belong to the receiving Window.
+  return getter && WritePageReference(state.page, PageReference::CustomElementsRegistry, value) &&
+         JS_DefineProperty(cx, state.page, "customElements", getter, setter, JSPROP_ENUMERATE) &&
+         state.helpers.Accessor("Window", state.page, "customElements") &&
          InstallCustomStateSet(state) && InstallElementInternals(state);
 }
 }  // namespace ruyijs::document_model

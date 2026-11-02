@@ -20,12 +20,13 @@ State* Branded(JSContext* cx, JS::HandleValue value, const JSClass* shape,
 }
 }
 State* WindowGlobalOwner(JSContext* cx, JS::HandleObject object, JS::MutableHandleObject prototype) {
-  if (object && JS_IsGlobalObject(object)) {
-    JSAutoRealm realm(cx, object);
-    if (!JS_GetPrototype(cx, object, prototype)) return nullptr;
+  JS::RootedObject global(cx, WindowGlobal(object));
+  if (global && JS_IsGlobalObject(global)) {
+    JSAutoRealm realm(cx, global);
+    if (!JS_GetPrototype(cx, global, prototype)) return nullptr;
     if (prototype && JS::GetClass(prototype) == &kWindowFacadeClass) {
       auto* owner = static_cast<State*>(JS::GetReservedSlot(prototype, 0).toPrivate());
-      if (owner && owner->page == object) return owner;
+      if (owner && owner->page == global) return owner;
     }
   }
   Error(cx, "Window member called on incompatible receiver");

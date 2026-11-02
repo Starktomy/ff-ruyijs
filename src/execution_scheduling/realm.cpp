@@ -1,6 +1,7 @@
 #include "execution_scheduling/state.h"
 #include "execution_scheduling/idle.h"
 #include "execution_scheduling/scheduler.h"
+#include "browser_environment/cross_origin.h"
 #include "runtime/page_helpers.h"
 #include "jsfriendapi.h"
 #include "js/Promise.h"
@@ -52,6 +53,7 @@ JSObject* ReceiverGlobal(const JS::CallArgs& args) {
                                         : GlobalOf(&args.thisv().toObject());
 }
 bool State::Owns(JSObject* receiver) const {
+  receiver = browser_environment::WindowGlobal(receiver);
   if (receiver == page.get()) return true;
   for (JSObject* installed : realms)
     if (installed == receiver) return true;

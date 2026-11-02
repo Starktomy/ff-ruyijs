@@ -21,6 +21,7 @@ const char* const kLocationNames[] = {"href", "replace"};
 struct Handler final : js::BaseProxyHandler {
   bool location;
   explicit constexpr Handler(bool isLocation) : BaseProxyHandler(&kFamily, false, true), location(isLocation) {}
+  bool mayBeSwapped() const override { return !location; }
   static JSObject* Target(JSObject* proxy) { return &js::GetProxyPrivate(proxy).toObject(); }
   static bool Same(JSContext* cx, JS::HandleObject proxy, bool* same) {
     if (HostCaller(cx)) return *same = true, true;
@@ -60,7 +61,7 @@ struct Handler final : js::BaseProxyHandler {
     JS::RootedObject cache(cx, &js::GetProxyReservedSlot(proxy, 0).toObject());
     if (!JS_GetProperty(cx, cache, name.c_str(), out)) return false;
     if (out.isObject()) return true;
-    JS::RootedObject target(cx, Target(proxy));
+    JS::RootedObject target(cx, location ? Target(proxy) : proxy.get());
     JS::RootedObject object(cx, NewForwarder(cx, target, name.c_str()));
     if (!object) return false;
     out.setObject(*object);

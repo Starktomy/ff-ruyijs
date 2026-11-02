@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 #include "execution_scheduling/performance.h"
 #include "jsfriendapi.h"
 #include "js/Wrapper.h"
@@ -7,7 +8,7 @@ bool PerformanceGlobal(JSContext* cx,unsigned argc,JS::Value* vp){
  JS::RootedObject original(cx,&js::GetFunctionNativeReserved(&args.callee(),0).toObject());
  auto& s=*static_cast<State*>(JS::GetReservedSlot(original,PClock).toPrivate());
  JS::RootedObject receiver(cx,args.thisv().isNullOrUndefined()?&JS::GetReservedSlot(original,PPage).toObject():
-  args.thisv().isObject()?js::CheckedUnwrapStatic(&args.thisv().toObject()):nullptr),owner(cx);
+  args.thisv().isObject()?browser_environment::WindowGlobal(&args.thisv().toObject()):nullptr),owner(cx);
  for(JSObject* object:s.performanceObjects){if(&JS::GetReservedSlot(object,PPage).toObject()==receiver){owner=object;break;}}
  if(!owner)return Error(cx,"Illegal Window receiver");
  if(PerfSelector(args)==100){

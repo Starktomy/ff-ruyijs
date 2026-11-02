@@ -30,7 +30,7 @@ static State* GlobalReceiver(JSContext* cx, const JS::CallArgs& args) {
   // (undefined) and an explicit null to the callee realm's global
   // (dom/bindings/BindingUtils.cpp:2863-2874). Any other receiver is rejected.
   bool is_page = args.thisv().isNullOrUndefined() ||
-                 (args.thisv().isObject() && &args.thisv().toObject() == state->page);
+                 (args.thisv().isObject() && WindowGlobal(&args.thisv().toObject()) == state->page);
   if (!is_page) {
     WebKit::FailBrand(cx, args, "Window");
     return nullptr;
@@ -55,7 +55,7 @@ static bool GlobalGet(JSContext* cx, unsigned argc, JS::Value* vp) {
     JS::RootedObject window(cx, slot == 2 ? state->topWindow : state->parentWindow);
     return WindowView(cx, state->page, window, args.rval());
   }
-  args.rval().setObject(slot < 4 ? *state->page : *state->instances.get()[slot - 4]);
+  args.rval().setObject(slot < 4 ? *WindowProxy(state->page) : *state->instances.get()[slot - 4]);
   return JS_WrapValue(cx, args.rval());
 }
 static bool Replace(JSContext* cx, unsigned argc, JS::Value* vp) {

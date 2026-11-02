@@ -1,3 +1,4 @@
+#include "browser_environment/cross_origin.h"
 // window.cookieStore: the CookieStore interface (dom/webidl/CookieStore.webidl)
 // over the one cookie jar this owner already keeps. The four operations are
 // page_cookie_store_methods.cpp and reach the jar through the same
@@ -75,7 +76,7 @@ bool Illegal(JSContext* cx, unsigned argc, JS::Value* vp) {
 bool WindowCookieStore(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
   State& s = *static_cast<State*>(WebKit::Owner(args));
-  JSObject* self = args.thisv().isObject() ? js::CheckedUnwrapStatic(&args.thisv().toObject())
+  JSObject* self = args.thisv().isObject() ? browser_environment::WindowGlobal(&args.thisv().toObject())
                                           : nullptr;
   if (self != s.page.get())
     return WebKit::Fail(cx, "'get cookieStore' called on an object that does not implement "

@@ -179,11 +179,11 @@ bool PageLoad::LoadFrame(BrowsingContext& target, const std::string& url,
     return false;
   }
   DepthGuard guard(depth_);
-  Owners owners{cx_, target.page, *target.environment, *target.document, *target.interaction,
-                target.resources->Resources(), *target.platform};
-  JSAutoRealm realm(owners.cx, owners.page);
+  JS::RootedObject previousPage(cx_, target.page);
+  JSAutoRealm previousRealm(cx_, previousPage);
+  resource_network::Model& network = Network(target);
   resource_network::HttpContext source;
-  if(!owners.resources.ReadHttpContext(&source))return false;
+  if(!network.ReadHttpContext(&source))return false;
   resource_network::HttpResult http;
   std::string body;
   uint32_t executed = 0;
@@ -207,8 +207,9 @@ bool PageLoad::LoadFrame(BrowsingContext& target, const std::string& url,
   const double qpc = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now().time_since_epoch()).count();
 #endif
-  resource_network::PerformHttp(owners.resources, method, url, headers, requestBody,
-      &http, resource_network::RedirectMode::Follow, options);
+  if (url != "about:blank")
+    resource_network::PerformHttp(network, method, url, headers, requestBody,
+        &http, resource_network::RedirectMode::Follow, options);
   // Commit the response URL, not the pre-redirect request URL. This is also
   // the source for Location, origin checks and relative child resources.
   if (http.status == 204 || http.status == 205) return true;
@@ -216,15 +217,24 @@ bool PageLoad::LoadFrame(BrowsingContext& target, const std::string& url,
   const auto fragment = url.find('#');
   if (fragment != std::string::npos && committed.find('#') == std::string::npos)
     committed += url.substr(fragment);
+  BrowsingContext* next = nullptr;
+  if (!frames_.Advance(target, &next)) return false;
+  JS::RootedObject page(cx_, next->page);
+  JSAutoRealm realm(cx_, page);
+  Owners owners = OwnersOf(*next, page);
   if (!owners.environment.SetFrameLocation(committed) ||
-      !ConfigureSecureExposure(target) || !IsolateCrossSiteFrame(target, committed) ||
+      !ConfigureSecureExposure(*next) || !IsolateCrossSiteFrame(*next, committed) ||
       !owners.environment.CommitAgentCluster(AgentClusterHeader(http))) return false;
   // A fetched document does not inherit its creator's policies (D133: the
   // response's own CSP header is not read).
-  if (target.security) target.security->Reset();
+  if (next->security) {
+    next->security->Reset();
+    if (committed == "about:blank" && next->parent && next->parent->security)
+      next->security->InheritFrom(*next->parent->security);
+  }
   if (http.status != 0) body = http.body;
   const auto ended = scheduling_.Inspect();
-  if (!RecordFrameNavigation(target, committed, http, origin, ended.epoch + ended.now, qpc)) return false;
+  if (!RecordFrameNavigation(*next, committed, http, origin, ended.epoch + ended.now, qpc)) return false;
   owners.document.SetDocumentReferrer(http.referrer);
   JS::RootedString markup(owners.cx, JS_NewStringCopyUTF8N(owners.cx,
       JS::UTF8Chars(body.data(), body.size())));
@@ -243,17 +253,19 @@ bool PageLoad::LoadFrameHtml(BrowsingContext& target, const std::string& html) {
     return false;
   }
   DepthGuard guard(depth_);
-  Owners owners{cx_, target.page, *target.environment, *target.document, *target.interaction,
-                target.resources->Resources(), *target.platform};
-  JSAutoRealm realm(owners.cx, owners.page);
+  BrowsingContext* next = nullptr;
+  if (!frames_.Advance(target, &next)) return false;
+  JS::RootedObject page(cx_, next->page);
+  JSAutoRealm realm(cx_, page);
+  Owners owners = OwnersOf(*next, page);
   if (!owners.environment.SetFrameLocation("about:srcdoc")) return false;
   // The child document's secure-context surface follows its committed URL.
-  if (!ConfigureSecureExposure(target)) return false;
+  if (!ConfigureSecureExposure(*next)) return false;
   if (!owners.environment.CommitAgentCluster("")) return false;
   // An about:srcdoc document inherits its creator's policies.
-  if (target.security) {
-    target.security->Reset();
-    if (target.parent && target.parent->security) target.security->InheritFrom(*target.parent->security);
+  if (next->security) {
+    next->security->Reset();
+    if (next->parent && next->parent->security) next->security->InheritFrom(*next->parent->security);
   }
   JS::RootedString markup(owners.cx, JS_NewStringCopyUTF8N(owners.cx,
       JS::UTF8Chars(html.data(), html.size())));

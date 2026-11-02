@@ -1,4 +1,5 @@
 #include "interaction/internal.h"
+#include "browser_environment/cross_origin.h"
 #include <cmath>
 #include "interaction/close_watcher.h"
 #include "runtime/exception_capture.h"
@@ -18,7 +19,7 @@ void State::invoke(std::shared_ptr<Listener> listener, domain::DomEvent& value, 
   JS::RootedValue function(cx, JS::ObjectValue(*callback));
   JSObject* endpoint = targetObject(target);
   if (!endpoint) { JS_ClearPendingException(cx); return; }
-  JS::RootedValue receiver(cx, JS::ObjectValue(*endpoint));
+  JS::RootedValue receiver(cx, JS::ObjectValue(*browser_environment::WindowProxy(endpoint)));
   JS::RootedValue argument(cx, JS::ObjectValue(*entry->object));
   JS::RootedValue result(cx);
   bool ok = true;

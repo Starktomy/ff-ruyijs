@@ -104,9 +104,11 @@ class Environment final {
   // Media owner supplies its sole SameObject instance to the existing factory.
   void SetNavigatorMediaCapabilities(JS::HandleObject value);
   // HTML IsPlatformObjectSameOrigin for other owners (docs/owners/BROWSER_ENVIRONMENT.md):
-  // `target` (a window global) as the current realm may see it - itself when
-  // same origin, else its cross-origin WindowProxy - and the plain check.
+  // The stable WindowProxy of `target` (a window global), whose handler checks
+  // origin on every access, and the plain same-origin check.
   static bool WindowView(JSContext*, JS::HandleObject target, JS::MutableHandleValue out);
+  // Move the previous document's stable WindowProxy to this fresh inner Window.
+  bool AdoptWindow(Environment& previous);
   static bool SameOriginWithCurrent(JSContext*, JS::HandleObject target, bool* same);
   static bool ReadNavigatorMediaCapabilities(JSContext*, JS::HandleValue,
                                             JS::MutableHandleValue);

@@ -85,13 +85,15 @@ bool InvalidatePageFrames(JSContext* cx, JS::HandleObject page) {
 }
 
 bool ReadPageReference(JS::HandleObject page, PageReference slot, JS::MutableHandleValue value) {
-  if (!page || JS::GetClass(page) != &kPageClass || slot >= PageReference::Count) return false;
-  value.set(JS::GetReservedSlot(page, JSCLASS_GLOBAL_SLOT_COUNT + unsigned(slot)));
+  JSObject* global = browser_environment::WindowGlobal(page);
+  if (!global || JS::GetClass(global) != &kPageClass || slot >= PageReference::Count) return false;
+  value.set(JS::GetReservedSlot(global, JSCLASS_GLOBAL_SLOT_COUNT + unsigned(slot)));
   return true;
 }
 bool WritePageReference(JS::HandleObject page, PageReference slot, JS::HandleValue value) {
-  if (!page || JS::GetClass(page) != &kPageClass || slot >= PageReference::Count) return false;
-  JS::SetReservedSlot(page, JSCLASS_GLOBAL_SLOT_COUNT + unsigned(slot), value);
+  JSObject* global = browser_environment::WindowGlobal(page);
+  if (!global || JS::GetClass(global) != &kPageClass || slot >= PageReference::Count) return false;
+  JS::SetReservedSlot(global, JSCLASS_GLOBAL_SLOT_COUNT + unsigned(slot), value);
   return true;
 }
 

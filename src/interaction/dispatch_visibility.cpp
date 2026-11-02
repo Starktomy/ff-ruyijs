@@ -1,5 +1,6 @@
 // composedPath projects the active rooted snapshot, never a mutable public tree.
 #include "interaction/internal.h"
+#include "browser_environment/cross_origin.h"
 #include "js/PropertyAndElement.h"
 
 namespace ruyijs::interaction {
@@ -14,7 +15,7 @@ bool ComposeEventPath(JSContext* cx, Event& event, JS::HandleObject array) {
     if (path.flags[index] & 1) first = index + 1;
   JS::RootedValue value(cx);
   for (size_t index = first; index < path.objects.length(); ++index) {
-    value.setObject(*path.objects[index]);
+    value.setObject(*browser_environment::WindowProxy(path.objects[index]));
     if (!JS_WrapValue(cx, &value) ||
         !JS_DefineElement(cx, array, uint32_t(index - first), value, JSPROP_ENUMERATE)) return false;
   }

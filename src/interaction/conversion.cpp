@@ -1,4 +1,5 @@
 #include "interaction/internal.h"
+#include "browser_environment/cross_origin.h"
 #include <cstring>
 #include <string>
 #include "runtime/web_kit.h"
@@ -72,7 +73,7 @@ Event* Receiver(JSContext* cx, const JS::CallArgs& args, Iface required, bool cr
 Target* TargetReceiver(JSContext* cx, const JS::CallArgs& args,
                        JS::MutableHandleObject object, State** owner) {
   if (args.thisv().isObject()) {
-    object.set(&args.thisv().toObject());
+    object.set(browser_environment::WindowGlobal(&args.thisv().toObject()));
   } else if (args.thisv().isNullOrUndefined()) {
     // Donor MaybeGlobalThisPolicy::ExtractThisObject: a bare call or an
     // explicit null/undefined this resolves to the callee realm's global
