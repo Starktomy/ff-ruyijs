@@ -16,7 +16,9 @@ a run as complete.
 
 Tests cover Trusted Types default-policy conversions, CSP policy names, receiver
 realms, concurrent Engine sessions, document replacement, host access to closed
-shadow roots and input coordinates/focus inside iframes. Local fixtures do
+shadow roots and input coordinates/focus inside iframes, borrowed Document
+getters, MouseEvent.which, and screen origins through nested frames, scrolling,
+transforms and hidden ancestors. Local fixtures do
 not establish live token acceptance. The retained Cloudflare application driver
 and its API regressions are available on `backup/main-full-20261107` for migration
 to the surrounding application.

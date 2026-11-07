@@ -76,6 +76,8 @@ class Realm final {
   bool SvgLengthViewportSize(double* width, double* height);
   void SetBoxPorts(const BoxPorts&);
   bool MeasureElement(JS::HandleObject, std::array<double, 4>*, bool* present, bool content = false);
+  // Content box in viewport coordinates, for the embedding frame's screen origin.
+  bool MeasureContentRect(JS::HandleObject, std::array<double, 4>*, bool* present);
   bool MeasureOffset(JS::HandleObject, document_model::OffsetGeometry*);
   // An element scroll container's position (box_scroll.cpp): read, or with
   // |write| clamp and store (*changed when it moved). 0,0 for a non-container.

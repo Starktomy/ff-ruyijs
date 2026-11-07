@@ -134,6 +134,20 @@ bool BindGeometryPorts(BrowsingContext& context) {
     *height = present ? std::clamp(std::round(rect[3]), 0.0, limit) : 0;
     return true;
   }, &context);
+  if (context.parent) context.environment->SetScreenOriginPort([](void* raw, double* x, double* y, bool* rendered) {
+    auto& owner = *static_cast<BrowsingContext*>(raw);
+    *x = *y = 0;
+    *rendered = false;
+    JS::RootedObject frame(owner.cx);
+    if (!owner.parent->document->WrapNode(owner.frame_element, &frame)) return false;
+    std::array<double, 4> rect{}; bool present = false;
+    if (!owner.parent->geometry->MeasureContentRect(frame, &rect, &present)) return false;
+    if (!present) return true;
+    if (!owner.parent->environment->InnerScreenOrigin(x, y, rendered)) return false;
+    if (!*rendered) return true;
+    *x += rect[0]; *y += rect[1];
+    return true;
+  }, &context);
   context.geometry->SetBoxPorts(boxes);
   context.document->SetOffsetGeometryPort([](void* raw, JS::HandleObject element,
                                              document_model::OffsetGeometry* out) {

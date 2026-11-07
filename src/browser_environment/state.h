@@ -134,6 +134,9 @@ struct State final {
   // runtime's parent Geometry port and never store an iframe size here.
   ViewportPort viewportPort = nullptr;
   void* viewportPortContext = nullptr;
+  // Child content origin projected by its parent's Geometry owner.
+  bool (*screenOriginPort)(void*, double*, double*, bool*) = nullptr;
+  void* screenOriginContext = nullptr;
   // Sole DOMException thrower, the Document Model factory, bound by the same
   // runtime coordinator (runtime/browsing_context.cpp). Only used by members
   // whose spec failure is a DOMException, such as btoa/atob/structuredClone.

@@ -123,6 +123,10 @@ void Environment::SetViewportPort(bool (*port)(void*, double*, double*), void* c
   state_->viewportPort = port;
   state_->viewportPortContext = context;
 }
+void Environment::SetScreenOriginPort(bool (*port)(void*, double*, double*, bool*), void* context) {
+  state_->screenOriginPort = port;
+  state_->screenOriginContext = context;
+}
 void Environment::RetireMessages() { state_->messageActive = false; }
 void Environment::SetMessagePort(
     bool (*port)(void*, JS::HandleObject, JS::HandleValue, const char*, JS::HandleObject, JS::HandleObject), void* context) {

@@ -57,6 +57,7 @@ class Environment final {
   // Dynamic Window named access, resolved by the sole Document owner.
   void SetWindowNamePort(WindowNamePort port, void* context);
   void SetViewportPort(bool (*port)(void*, double*, double*), void* context);
+  void SetScreenOriginPort(bool (*port)(void*, double*, double*, bool*), void* context);
   void SetScrollExtentPort(bool (*port)(void*, double*, double*), void* context);
   // Interaction port: fires the trusted scroll/scrollend UIEvent at this
   // context's document. Bound next to the post-task port, cleared with it.
@@ -94,7 +95,7 @@ class Environment final {
   JSObject* navigatorPrototype() const;
   // The content area's screen origin (mozInnerScreenX/Y): host input adds it
   // to client coordinates for MouseEvent.screenX/Y.
-  bool InnerScreenOrigin(double* x, double* y);
+  bool InnerScreenOrigin(double* x, double* y, bool* present = nullptr);
   // Re-defines Navigator.prototype members in Firefox binding order; called
   // once by the runtime coordinator after every Navigator-extending installer.
   bool OrderNavigator();

@@ -255,13 +255,14 @@ bool Same(const document_model::NodeKey& a, const document_model::NodeKey& b) {
 }
 namespace {
 bool Result(const State& s, const LayoutCache& cache, size_t found, box::BoxViewport viewport, bool content,
-            std::array<double,4>* out, bool* present) {
+            std::array<double,4>* out, bool* present, bool projectContent = false) {
   if(!cache.layout[found].present) return true;
   *present=true;
   // A scrolled container moves its descendants like the viewport moves all.
   const auto scrolled=AncestorScroll(s,cache,found);
   viewport.scroll_x+=scrolled[0]; viewport.scroll_y+=scrolled[1];
-  *out=content?cache.layout[found].content:box::ProjectBoxRect(cache.nodes,cache.layout,viewport,found);
+  *out=content&&!projectContent?cache.layout[found].content:
+      box::ProjectBoxRect(cache.nodes,cache.layout,viewport,found,content);
   return true;
 }
 }
@@ -271,6 +272,12 @@ bool Realm::MeasureElement(JS::HandleObject element, std::array<double,4>* out, 
   std::shared_ptr<const LayoutCache> layout; size_t found=size_t(-1); box::BoxViewport viewport;
   if(!LayoutFor(*state_,element,&layout,&found,&viewport)) return false;
   return !layout||found==size_t(-1)||Result(*state_,*layout,found,viewport,content,out,present);
+}
+bool Realm::MeasureContentRect(JS::HandleObject element, std::array<double,4>* out, bool* present) {
+  *out={}; *present=false;
+  std::shared_ptr<const LayoutCache> layout; size_t found=size_t(-1); box::BoxViewport viewport;
+  if(!LayoutFor(*state_,element,&layout,&found,&viewport)) return false;
+  return !layout||found==size_t(-1)||Result(*state_,*layout,found,viewport,true,out,present,true);
 }
 bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutCache>* out, size_t* index,
                box::BoxViewport* viewport_out) {

@@ -108,5 +108,5 @@ bool BoxScrollContainer(const std::vector<BoxNode>&, size_t);
 void BoxOverflowExtent(const std::vector<BoxNode>&, const std::vector<BoxLayout>&, size_t index,
                        double* right, double* bottom);
 BoxRect ProjectBoxRect(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
-                       const BoxViewport&, size_t target);
+                       const BoxViewport&, size_t target, bool content = false);
 }

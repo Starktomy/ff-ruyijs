@@ -48,9 +48,14 @@ bool ScreenField(State& state, uint32_t field, JS::MutableHandleValue result) {
 // position plus the window frame border (half the outer/inner width
 // difference) and, vertically, the browser chrome above the content. Firefox
 // trace 20261021-160155: screenX 22, outerWidth 1296, innerWidth 1280 ->
-// mozInnerScreenX 30. Uses the top-level viewport, so an iframe reports its
-// top window's origin (an offset frame is a recorded deviation, D46).
-bool InnerScreen(State& state, double* x, double* y) {
+// mozInnerScreenX 30. A child reads its embedding content box through the
+// parent's Geometry owner, including nested frame offsets and scrolling.
+bool InnerScreen(State& state, double* x, double* y, bool* present = nullptr) {
+  bool rendered = true;
+  if (!present) present = &rendered;
+  *present = true;
+  if (state.screenOriginPort)
+    return state.screenOriginPort(state.screenOriginContext, x, y, present);
   JS::RootedValue sx(state.cx), sy(state.cx), ow(state.cx), oh(state.cx), iw(state.cx), ih(state.cx);
   if (!state.Read(Kind::Screen, 4, ValueType::Integer, &sx) || !state.Read(Kind::Screen, 5, ValueType::Integer, &sy) ||
       !state.Read(Kind::Screen, 0, ValueType::Integer, &ow) || !state.Read(Kind::Screen, 1, ValueType::Integer, &oh) ||
@@ -460,8 +465,8 @@ bool State::InstallWorkerEncoding(JS::HandleObject prototype) {
   }
   return true;
 }
-bool Environment::InnerScreenOrigin(double* x, double* y) {
+bool Environment::InnerScreenOrigin(double* x, double* y, bool* present) {
   JSAutoRealm realm(state_->cx, state_->page);
-  return InnerScreen(*state_, x, y);
+  return InnerScreen(*state_, x, y, present);
 }
 }

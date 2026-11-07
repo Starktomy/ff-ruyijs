@@ -67,8 +67,15 @@ bool GetUiWhich(JSContext* cx, unsigned argc, JS::Value* vp) {
   Event* event = Receiver(cx, args, Iface::UI, true);
   if (!event) return false;
   ReportEventAccess(cx, event, "UIEvent", "which", int(ApiAccess::Read));
-  args.rval().setNumber(event->kind == Kind::Keyboard ?
-      KeyboardCodeValue(cx, event, domain::KeyboardCode::Which) : 0);
+  // Firefox's MouseEvent::Which is Button() + 1, including PointerEvent,
+  // WheelEvent and the other MouseEvent descendants. A mouse pointermove
+  // uses button -1 and therefore still reports zero.
+  const uint32_t which = event->kind == Kind::Keyboard
+      ? KeyboardCodeValue(cx, event, domain::KeyboardCode::Which)
+      : IsA(event->kind, Iface::Mouse)
+          ? uint32_t(JS::GetReservedSlot(event->object, kEventButton).toInt32()) + 1u
+          : 0u;
+  args.rval().setNumber(which);
   return true;
 }
 bool GetKeyboardModifierState(JSContext* cx, unsigned argc, JS::Value* vp) {

@@ -55,17 +55,19 @@ static bool Get(JSContext* cx, unsigned argc, JS::Value* vp) {
     }
     return Value(cx, DomStringView(text), args.rval());
   }
-  State& state = *FunctionState(args);
-  NodeKind kind = NodeKind::Document;
-  Wrapper* entry = Receiver(state, args, &kind);
+  // A getter can be borrowed from another same-origin Window. Its receiver's
+  // document owns both the tree and browsing context; the function's realm
+  // must not select a different document or reject a valid foreign wrapper.
+  Wrapper* entry = NodeReceiver(cx, args.thisv(), NodeKind::Document);
   if (!entry) return false;
+  State& state = *entry->owner;
   bool main = Same(state.main, entry->key);
   // Observation only: reported after the receiver is validated, so an invalid
   // receiver still throws from the same place and records nothing.
   state.Observe("Document", FieldName(field), int(ApiAccess::Read));
   if (field == Location || field == View) {
     args.rval().setObjectOrNull(main ? field == Location ? state.environment.location() : state.page.get() : nullptr);
-    return true;
+    return JS_WrapValue(cx, args.rval());
   }
   DocumentSnapshot value;
   if (!state.Check(state.model.InspectDocument(entry->key, &value))) return false;

@@ -105,6 +105,7 @@ BrowsingContext::~BrowsingContext() {
     SetPageFrames(page, nullptr);
     environment->SetWindowNamePort(nullptr, nullptr);
     environment->SetViewportPort(nullptr, nullptr);
+    environment->SetScreenOriginPort(nullptr, nullptr);
     environment->SetExceptionPort(nullptr, nullptr);
     environment->SetGraphicsPort(nullptr, nullptr);
     environment->SetGraphicsDescribe(nullptr, nullptr);
@@ -851,6 +852,7 @@ void Frames::Retire(const BrowsingContext* ancestor) {
       child->environment->RetireMessages();
       child->messaging->Retire();
       child->environment->SetViewportPort(nullptr, nullptr);
+      child->environment->SetScreenOriginPort(nullptr, nullptr);
       if (retire_) retire_(retireContext_, *child);
       retired_.push_back(std::move(child));
     }

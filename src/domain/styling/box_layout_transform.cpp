@@ -61,11 +61,11 @@ Matrix Transform(const BoxStyle& style, const BoxRect& box) {
 }
 }
 BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
-                       const BoxViewport& viewport, size_t target) {
+                       const BoxViewport& viewport, size_t target, bool content) {
   Matrix matrix{1,0,0,1,0,0};
   for(size_t i=target;i!=kNoBox;i=nodes[i].parent)
     matrix=Multiply(Transform(nodes[i].style,boxes[i].border),matrix);
-  const auto& box=boxes[target].border;
+  const auto& box=content?boxes[target].content:boxes[target].border;
   double xs[4],ys[4];
   for(unsigned i=0;i<4;++i) {
     const double x=box[0]+(i&1?box[2]:0), y=box[1]+(i&2?box[3]:0);
