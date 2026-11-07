@@ -21,6 +21,7 @@ bool Forward(JSContext* cx, unsigned argc, JS::Value* vp) {
   JS::RootedObject callee(cx, &args.callee());
   JS::RootedValue target(cx, js::GetFunctionNativeReserved(callee, 0));
   JS::RootedString name(cx, js::GetFunctionNativeReserved(callee, 1).toString());
+  JS::RootedValue self(cx, js::GetFunctionNativeReserved(callee, 2));
   JS::RootedObject object(cx, &target.toObject());
   JS::RootedValue method(cx);
   JS::UniqueChars text = JS_EncodeStringToUTF8(cx, name);
@@ -28,7 +29,14 @@ bool Forward(JSContext* cx, unsigned argc, JS::Value* vp) {
   JS::RootedValueVector values(cx);
   for (unsigned i = 0; i < args.length(); ++i)
     if (!values.append(args[i])) return false;
-  return JS::Call(cx, target, method, JS::HandleValueArray(values), args.rval());
+  // Window methods must see the cross-origin view, not the raw target window:
+  // WindowOwner resolves the view before checking the receiver brand. Location
+  // methods (href/replace) keep the real Location receiver.
+  const bool window_method = !text ? false :
+      (!std::strcmp(text.get(), "postMessage") || !std::strcmp(text.get(), "close") ||
+       !std::strcmp(text.get(), "focus") || !std::strcmp(text.get(), "blur"));
+  JS::RootedValue thisv(cx, window_method ? self : target);
+  return JS::Call(cx, thisv, method, JS::HandleValueArray(values), args.rval());
 }
 JSObject* NewView(JSContext* cx, const js::BaseProxyHandler* handler, JS::HandleObject real, JSObject* owner) {
   JS::RootedValue priv(cx, JS::ObjectValue(*real));
@@ -41,13 +49,15 @@ JSObject* NewView(JSContext* cx, const js::BaseProxyHandler* handler, JS::Handle
 }
 }  // namespace
 
-JSObject* NewForwarder(JSContext* cx, JS::HandleObject target, const char* name) {
+JSObject* NewForwarder(JSContext* cx, JS::HandleObject proxy, JS::HandleObject target,
+                       const char* name) {
   JSFunction* fn = js::NewFunctionWithReserved(cx, Forward, std::strcmp(name, "postMessage") ? 0 : 1, 0, name);
   JS::RootedString text(cx, JS_NewStringCopyZ(cx, name));
   if (!fn || !text) return nullptr;
   JS::RootedObject object(cx, JS_GetFunctionObject(fn));
   js::SetFunctionNativeReserved(object, 0, JS::ObjectValue(*target));
   js::SetFunctionNativeReserved(object, 1, JS::StringValue(text));
+  js::SetFunctionNativeReserved(object, 2, JS::ObjectValue(*proxy));
   return object;
 }
 bool LocationView(JSContext* cx, State* owner, JS::HandleObject real, JS::MutableHandleValue out) {

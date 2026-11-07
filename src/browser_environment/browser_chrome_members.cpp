@@ -1,6 +1,8 @@
 #include "browser_environment/browser_chrome.h"
+#include "browser_environment/cross_origin_internal.h"
 #include "jsfriendapi.h"
 #include "js/Object.h"
+#include "js/Proxy.h"
 #include "js/Wrapper.h"
 
 namespace ruyijs::browser_environment {
@@ -33,9 +35,18 @@ State* WindowGlobalOwner(JSContext* cx, JS::HandleObject object, JS::MutableHand
 }
 State* WindowOwner(JSContext* cx, const JS::CallArgs& args, JS::MutableHandleObject prototype) {
   auto* caller = static_cast<State*>(js::GetFunctionNativeReserved(&args.callee(), 0).toPrivate());
-  JS::RootedObject object(cx, args.thisv().isObject() ?
-      js::CheckedUnwrapStatic(&args.thisv().toObject()) :
-      args.thisv().isNullOrUndefined() && caller ? caller->page.get() : nullptr);
+  JS::RootedObject object(cx);
+  if (args.thisv().isObject()) {
+    JS::RootedObject candidate(cx, &args.thisv().toObject());
+    // A forwarded close/focus/blur/postMessage call receives the cross-origin
+    // WindowProxy the script called through. Resolve its target before the
+    // window brand check, exactly as a same-origin call would arrive here.
+    if (js::IsProxy(candidate) && js::GetProxyHandler(candidate) == CrossOriginWindowHandler())
+      candidate = &js::GetProxyPrivate(candidate).toObject();
+    object = js::CheckedUnwrapStatic(candidate);
+  } else if (args.thisv().isNullOrUndefined() && caller) {
+    object = caller->page.get();
+  }
   return WindowGlobalOwner(cx, object, prototype);
 }
 bool ChromeValueGet(JSContext* cx, unsigned argc, JS::Value* vp) {

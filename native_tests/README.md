@@ -26,6 +26,11 @@ including garbage collection between documents. The retained Cloudflare applicat
 and its API regressions are available on `backup/main-full-20261107` for migration
 to the surrounding application.
 
+Frame enumeration and messaging regressions cover iframes inside closed and
+nested shadow roots (window.length/frames and frameElement) and both directions
+of WindowProxy.postMessage, including target-origin filtering. These local
+checks do not establish PerimeterX acceptance.
+
 Mouse-family precision checks compare 27 public constructor cases against
 Firefox 159 in the top document and an iframe. MouseEvent/WheelEvent coordinates
 floor on construction; PointerEvent preserves fractions except for click,

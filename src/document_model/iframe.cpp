@@ -186,19 +186,33 @@ bool InstallIframe(State& state) {
          state.Accessor("HTMLIFrameElement", "contentWindow", Frame, 0) &&
          state.Accessor("HTMLIFrameElement", "contentDocument", Frame, 1);
 }
+// Window.length/frames enumerate child browsing contexts in tree order,
+// including iframes inside shadow roots (their browsing context is a child of
+// the document's, independent of the shadow tree's DOM order). The unique
+// ownership subtree is the only source: Model::Query stays behind the public
+// light-tree selectors and would miss a frame in a closed shadow root.
+namespace {
+bool CollectIframes(State& state, std::vector<NodeKey>* keys) {
+  std::vector<NodeKey> descendants;
+  if (state.model.Subtree(state.main, &descendants).code != ErrorCode::None) return false;
+  for (NodeKey key : descendants) {
+    NodeSnapshot node;
+    if (state.model.Inspect(key, &node).code != ErrorCode::None) return false;
+    if (!node.is_connected || std::strcmp(node.interface_name, "HTMLIFrameElement")) continue;
+    keys->push_back(key);
+  }
+  return true;
+}
+}  // namespace
 size_t Realm::IframeCount() {
   std::vector<NodeKey> keys;
-  State& state = *state_;
-  if (state.model.Query(state.main, QueryKind::TagName, u"iframe", &keys).code !=
-      ErrorCode::None) return 0;
-  return keys.size();
+  return CollectIframes(*state_, &keys) ? keys.size() : 0;
 }
 bool Realm::FrameWindowAt(size_t index, JS::MutableHandleValue result) {
   result.setUndefined();
   State& state = *state_;
   std::vector<NodeKey> keys;
-  if (state.model.Query(state.main, QueryKind::TagName, u"iframe", &keys).code != ErrorCode::None ||
-      index >= keys.size()) return true;
+  if (!CollectIframes(state, &keys) || index >= keys.size()) return true;
   FrameLink* link = FindFrame(state, keys[index]);
   if (!link || !link->window) return true;
   JS::RootedObject window(state.cx, link->window);

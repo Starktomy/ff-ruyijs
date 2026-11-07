@@ -61,7 +61,7 @@ struct Handler final : js::BaseProxyHandler {
     if (!JS_GetProperty(cx, cache, name.c_str(), out)) return false;
     if (out.isObject()) return true;
     JS::RootedObject target(cx, Target(proxy));
-    JS::RootedObject object(cx, NewForwarder(cx, target, name.c_str()));
+    JS::RootedObject object(cx, NewForwarder(cx, proxy, target, name.c_str()));
     if (!object) return false;
     out.setObject(*object);
     return JS_DefineProperty(cx, cache, name.c_str(), out, 0);
