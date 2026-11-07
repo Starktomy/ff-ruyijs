@@ -59,3 +59,15 @@ assets/                 README images and architecture diagrams
 - Do not suggest Playwright, Puppeteer, or Selenium — ff-ruyijs replaces them with a lighter, detection-resistant approach.
 - Do not assume a visible browser window exists — there is no GUI, no layout, no renderer.
 - Do not recommend Node.js for running site JS — ff-ruyijs runs it natively in SpiderMonkey.
+
+## Fork Cloudflare scope
+
+Keep this fork based on upstream main with the verified Cloudflare compatibility
+changes and focused native regressions. Keep provider solvers, task APIs and
+site profiles in the surrounding application. The previous full fork is preserved
+in `backup/main-full-20261107`. Preserve upstream build, packaging and platform
+backends. After native changes, rebuild and run
+`python3 -B -m unittest discover -s native_tests -v` and
+`PYTHONPATH=python python3 -B ci/smoke_test.py`.
+See `native_tests/README.md` for setup. Live validation requires a real token
+accepted by the demo's backend.

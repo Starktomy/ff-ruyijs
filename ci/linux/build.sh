@@ -91,6 +91,8 @@ case "$step" in
     "${clean[@]}" "$venv/bin/python" "$root/ci/proxy_smoke.py"
     # The ClientHello must be Firefox 159's (ci/firefox159-hello.json).
     "${clean[@]}" "$venv/bin/python" "$root/ci/hello_check.py"
+    # Native compatibility patches, including concurrent Trusted Types sessions.
+    "${clean[@]}" "$venv/bin/python" -B -m unittest discover -s "$root/native_tests" -v
     # Several Contexts as sessions of one shared engine process.
     "${clean[@]}" "$venv/bin/python" "$root/ci/engine_check.py" --network ;;
   *)
