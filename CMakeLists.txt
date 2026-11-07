@@ -44,7 +44,9 @@ function(ruyijs_foreign_library name)
 endfunction()
 ruyijs_foreign_library(ruyijs_image_native)
 ruyijs_foreign_library(ruyijs_cs_brotli)
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DONOR_SOURCE}/gfx/skia/moz.build")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${DONOR_SOURCE}/gfx/skia/moz.build"
+  "${DONOR_SOURCE}/gfx/skia/skia/src/ports/SkFontMgr_fontconfig.cpp")
 # Firefox's own Skia (gfx/skia of the donor's source tree), the raster backend
 # Windows and macOS take from a Firefox browser build, compiled here with
 # Skia's Fontconfig/FreeType ports (tools/prepare_skia_linux.py).

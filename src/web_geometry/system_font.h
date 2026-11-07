@@ -104,6 +104,10 @@ class SystemFonts final {
   // SVG ex/ch/ic/cap sizes from the shared collection (svg_length_font.cpp).
   bool SvgLengthMetrics(const FontInput&, float* ex, float* ch, float* ic, float* cap);
  private:
+#if defined(__linux__)
+  std::shared_ptr<FontCollection> collection_;
+#else
   std::unique_ptr<FontCollection> collection_;
+#endif
 };
 }

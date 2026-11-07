@@ -8,6 +8,7 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkStream.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypeface.h"
 #include "include/ports/SkFontMgr_fontconfig.h"
@@ -19,28 +20,43 @@
 #include <codecvt>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 #include <locale>
 #include <mutex>
 #include <unordered_map>
 
 namespace ruyijs::web_geometry {
 struct FontCollection {
-  sk_sp<SkFontMgr> manager = [] {
+  sk_sp<SkFontMgr> manager;
+  bool initialized = false;
+  SkFontMgr* Manager() {
+    if (initialized) return manager.get();
+    initialized = true;
     auto* config = FcInitLoadConfigAndFonts();
-    if (!config) return sk_sp<SkFontMgr>();
+    if (!config) return nullptr;
     const auto* directory = std::getenv("RUYIJS_FONT_DIRECTORY");
     if (directory && *directory && !FcConfigAppFontAddDir(config, reinterpret_cast<const FcChar8*>(directory))) {
-      FcConfigDestroy(config); return sk_sp<SkFontMgr>();
+      FcConfigDestroy(config); return nullptr;
     }
-    return SkFontMgr_New_FontConfig(config, SkFontScanner_Make_FreeType());
-  }();
+    manager = SkFontMgr_New_FontConfig(config, SkFontScanner_Make_FreeType());
+    return manager.get();
+  }
   std::unordered_map<std::string, sk_sp<SkTypeface>> selected;
+  std::unordered_map<std::string, sk_sp<SkTypeface>> familyMatches;
   std::unordered_map<uint32_t, hb_face_t*> faces;
   uint64_t generation = 0;
   ~FontCollection() { for (auto [id, face] : faces) hb_face_destroy(face); }
 };
 namespace {
-// Per session: a shared engine runs each Context on its own thread.
+// Share bounded caches among font consumers on the owning JS thread. Release
+// them with the last consumer; independent Engine threads keep separate caches.
+std::shared_ptr<FontCollection> SharedFonts() {
+  static thread_local std::weak_ptr<FontCollection> cached;
+  auto fonts = cached.lock();
+  if (!fonts) { fonts = std::make_shared<FontCollection>(); cached = fonts; }
+  return fonts;
+}
+// Per session: an Engine runs each Context on its own thread.
 thread_local std::atomic<double> pixelRatio{1};
 std::mutex languageLock;
 thread_local std::string browserLanguage = "en-US";
@@ -83,12 +99,25 @@ SkFontStyle Style(const FontInput& input) {
   return {int(input.weight), SkFontStyle::kNormal_Width,
            input.italic ? SkFontStyle::kItalic_Slant : SkFontStyle::kUpright_Slant};
 }
+// Family/style matching does not depend on the character. Keep it separate
+// from the glyph fallback cache so a new character does not repeat Fontconfig's
+// substitutions and face matching. Glyph coverage is still checked below.
+sk_sp<SkTypeface> MatchFamily(FontCollection& fonts, const std::string& family, const FontInput& input) {
+  const auto key = family + '\0' + std::to_string(input.weight) + (input.italic ? ":i" : ":n");
+  if (auto found = fonts.familyMatches.find(key); found != fonts.familyMatches.end()) return found->second;
+  auto face = fonts.manager->matchFamilyStyle(family.c_str(), Style(input));
+  if (fonts.familyMatches.size() >= 256) fonts.familyMatches.clear();
+  fonts.familyMatches.emplace(key, face);
+  return face;
+}
 sk_sp<SkTypeface> Select(FontCollection& fonts, const FontInput& input, uint32_t code) {
-  if (!fonts.manager) return nullptr;
+  if (!fonts.Manager()) return nullptr;
   std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
   const std::string languageValue = FontLanguage(input);
   const auto generation = FontConfigGeneration();
-  if (fonts.generation != generation) { fonts.selected.clear(); fonts.generation = generation; }
+  if (fonts.generation != generation) {
+    fonts.selected.clear(); fonts.familyMatches.clear(); fonts.generation = generation;
+  }
   const auto key = input.family + '\0' + languageValue + '\0' + std::to_string(input.weight) +
       (input.italic ? ":i:" : ":n:") + std::to_string(code);
   if (auto found = fonts.selected.find(key); found != fonts.selected.end()) return found->second;
@@ -96,11 +125,11 @@ sk_sp<SkTypeface> Select(FontCollection& fonts, const FontInput& input, uint32_t
   const char* language = languageValue.c_str();
   for (const auto& family : Families(input)) {
     if (!FontFamilyVisible(convert.from_bytes(family))) continue;
-    auto face = fonts.manager->matchFamilyStyle(family.c_str(), Style(input));
+    auto face = MatchFamily(fonts, family, input);
     if (face && (!code || face->unicharToGlyph(code))) { fonts.selected[key] = face; return face; }
   }
   auto fallback = fonts.manager->matchFamilyStyleCharacter(nullptr, Style(input), &language, 1, code ? code : ' ');
-  auto face = fallback ? std::move(fallback) : fonts.manager->matchFamilyStyle("sans-serif", Style(input));
+  auto face = fallback ? std::move(fallback) : MatchFamily(fonts, "sans-serif", input);
   fonts.selected[key] = face;
   return face;
 }
@@ -126,8 +155,26 @@ hb_face_t* Face(FontCollection& fonts, SkTypeface* typeface) {
     for (auto [key, face] : fonts.faces) hb_face_destroy(face);
     fonts.faces.clear();
   }
-  typeface->ref();
-  auto* face = hb_face_create_for_tables(Table, typeface, [](void* owned) { static_cast<SkTypeface*>(owned)->unref(); });
+  // Skia file streams expose mapped font bytes. Keep the stream alive with
+  // the HarfBuzz blob instead of allocating duplicate OpenType table buffers.
+  hb_face_t* face = nullptr;
+  int index = 0;
+  auto stream = typeface->openStream(&index);
+  if (stream && index >= 0 && stream->getMemoryBase() &&
+      stream->getLength() <= std::numeric_limits<unsigned>::max()) {
+    const auto* bytes = static_cast<const char*>(stream->getMemoryBase());
+    const auto length = unsigned(stream->getLength());
+    auto* blob = hb_blob_create(bytes, length, HB_MEMORY_MODE_READONLY,
+                               stream.release(),
+                               [](void* owned) { delete static_cast<SkStreamAsset*>(owned); });
+    if (unsigned(index) < hb_face_count(blob)) face = hb_face_create(blob, unsigned(index));
+    hb_blob_destroy(blob);
+  }
+  if (!face) {
+    typeface->ref();
+    face = hb_face_create_for_tables(Table, typeface,
+                                    [](void* owned) { static_cast<SkTypeface*>(owned)->unref(); });
+  }
   fonts.faces[id] = face;
   return hb_face_reference(face);
 }
@@ -136,7 +183,7 @@ bool Shape(FontCollection& fonts, const std::u16string& text, const FontInput& i
            std::vector<domain::geometry::SvgBox>* characters = nullptr, double* advance = nullptr) {
   *size = float(std::round(input.size * input.scale * 60) / 60);
   if (text.size() > 65536 || !std::isfinite(*size) || *size < 0 || *size > 16384 ||
-      !std::isfinite(input.scale) || input.scale <= 0 || !fonts.manager) return false;
+      !std::isfinite(input.scale) || input.scale <= 0 || !fonts.Manager()) return false;
   if (advance) *advance = 0;
   if (text.empty() || !*size) return true;
   if (characters) characters->assign(text.size(), {});
@@ -225,7 +272,7 @@ SkMatrix Matrix(const float values[6]) {
   return result;
 }
 }
-SystemFonts::SystemFonts() : collection_(std::make_unique<FontCollection>()) {}
+SystemFonts::SystemFonts() : collection_(SharedFonts()) {}
 SystemFonts::~SystemFonts() = default;
 void SetDevicePixelRatio(double ratio) { if (std::isfinite(ratio) && ratio > 0) pixelRatio = ratio; }
 void SetBrowserLanguage(const std::string& value) { std::lock_guard<std::mutex> lock(languageLock); browserLanguage = value; }
