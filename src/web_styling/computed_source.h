@@ -45,11 +45,15 @@ class ComputedStyleReader final {
   explicit ComputedStyleReader(State&);
   ~ComputedStyleReader();
   bool Read(JS::HandleObject, ComputedStyle*);
+  // Prime all cached cascade scopes before reusing styles after inline edits.
+  bool PrepareScope(JS::HandleObject, size_t* scopeIndex = nullptr);
   // Firefox getDefaultComputedStyle: the same cascade with user-agent rules
   // only (no author sheets and no inline style on the element or its ancestors).
   bool ReadDefault(JS::HandleObject, ComputedStyle*);
   // The cascade scopes (document or shadow root) this reader resolved.
   size_t Scopes() const;
+  // Rooted samples and current fingerprints for document and shadow scopes.
+  bool ScopeStamps(JS::MutableHandleObjectVector, std::vector<uint64_t>*);
   // The selector dependencies of the scopes read so far (Web Geometry decides
   // from them whether an attribute change allows reusing other styles).
   const SelectorDependencies& Dependencies() const;

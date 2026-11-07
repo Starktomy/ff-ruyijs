@@ -6,6 +6,7 @@
 #define RUYIJS_WEB_STYLING_STATE_H
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -52,6 +53,11 @@ struct SheetCache {
   bool mainDocument = true;
   ruyijs::domain::styling::MediaListValue media;
   std::vector<std::shared_ptr<SheetRule>> rules;
+  // Canonical rule mutations invalidate this summary. Sheet membership,
+  // media flags and media-environment inputs are checked separately.
+  struct RuleSummary { uint64_t hash; bool hasMedia; };
+  mutable std::optional<RuleSummary> ruleSummary;
+  void InvalidateRules() { ruleSummary.reset(); }
   JSObject* object = nullptr;  // Non-owning identity; trace/finalize maintain it.
   explicit SheetCache(JSContext*) {}
 };

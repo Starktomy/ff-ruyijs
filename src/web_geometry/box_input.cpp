@@ -107,10 +107,12 @@ bool HasReach(const web_styling::SelectorDependencies& has, const LayoutCache::A
 uint64_t AttributeHash(const document_model::LayoutNodeSource& source) {
   uint64_t hash = 1469598103934665603ull;
   for (const auto& attr : source.attributes) {
-    if (attr.name == u"style") continue;
     for (char16_t c : attr.name) { hash ^= c; hash *= 1099511628211ull; }
     hash ^= 0x3d; hash *= 1099511628211ull;
-    for (char16_t c : attr.value) { hash ^= c; hash *= 1099511628211ull; }
+    // [style] also distinguishes an absent attribute from style="". Values
+    // remain separate inline-style inputs, as in the upstream reuse path.
+    if (attr.name != u"style")
+      for (char16_t c : attr.value) { hash ^= c; hash *= 1099511628211ull; }
     hash ^= 0x1f; hash *= 1099511628211ull;
   }
   return hash;
@@ -180,7 +182,14 @@ bool Visit(State& s, JS::HandleObject object, JS::HandleObject target, size_t pa
       same=inputs=true;
     } else {
       web_styling::ComputedStyle style;
+      const size_t before_scopes=styles.Scopes();
       if(!styles.Read(object,&style)) return false;
+      // A display change can reveal a previously unvisited shadow scope.
+      // Restart so its dependencies apply to every style reused in this pass.
+      if(previous && before_scopes && styles.Scopes()!=before_scopes) {
+        pass.restart=true;
+        return true;
+      }
       // Layout reads no custom property; dropping them keeps BoxStyle::Get short.
       std::erase_if(style.values,[](const auto& value){return value.first.starts_with("--");});
       child_inputs=style.childInputs; inherits_reset=style.inheritsReset;
@@ -252,6 +261,18 @@ bool Visit(State& s, JS::HandleObject object, JS::HandleObject target, size_t pa
 bool Same(const document_model::NodeKey& a, const document_model::NodeKey& b) {
   return a.document==b.document&&a.node==b.node;
 }
+bool SameScopes(State& s, const LayoutCache& cache) {
+  for(const auto& scope:cache.scopes) {
+    JS::RootedObject sample(s.cx,scope.sample->get());
+    uint64_t stamp=0;
+    if(!s.boxPorts.stamp(s.boxPorts.context,sample,&stamp)) {
+      JS_ClearPendingException(s.cx);  // The fresh layout reports real errors.
+      return false;
+    }
+    if(stamp!=scope.value) return false;
+  }
+  return true;
+}
 }
 namespace {
 bool Result(const State& s, const LayoutCache& cache, size_t found, box::BoxViewport viewport, bool content,
@@ -303,11 +324,13 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   if(!s.boxPorts.viewport(s.boxPorts.context,&viewport.width,&viewport.height,&viewport.scroll_x,&viewport.scroll_y)) return false;
   const std::array<double,4> view{viewport.width,viewport.height,viewport.scroll_x,viewport.scroll_y};
   uint64_t stamp=0;
-  bool stamped=s.boxPorts.stamp&&s.boxPorts.stamp(s.boxPorts.context,target,&stamp);
+  bool stamped=s.boxPorts.stamp&&s.boxPorts.stamp(s.boxPorts.context,root,&stamp);
   if(!stamped) JS_ClearPendingException(s.cx);  // Uncached: the full path below reports real errors.
   const auto& cached=s.layoutCache;
-  if(stamped&&cached&&cached->revision==revision&&cached->styles==stamp&&cached->viewport==view&&
-     Same(cached->root,rootKey)&&Same(cached->focused,focused)) {
+  const bool reusable=stamped&&cached&&cached->styles==stamp&&cached->viewport==view&&
+     cached->fonts==FontConfigGeneration()&&Same(cached->root,rootKey)&&
+     Same(cached->focused,focused)&&SameScopes(s,*cached);
+  if(reusable&&cached->revision==revision) {
     const auto hit=cached->index.find({targetKey.document,targetKey.node});
     if(hit!=cached->index.end()) { *out=cached; *index=hit->second; }
     return true;
@@ -317,8 +340,15 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   auto styles=s.boxPorts.styles(s.boxPorts.context);
   if(!styles) return false;
   Pass pass{*cache,size_t(-1),*styles};
-  if(stamped&&cached&&cached->styles==stamp&&cached->viewport==view&&
-     Same(cached->root,rootKey)&&Same(cached->focused,focused)) {
+  // Across multiple scopes only inline changes may reuse styles; preserve
+  // upstream child-input/reset-property tracking and text measurement reuse.
+  if(reusable&&(cached->scopes.size()<=1||cached->structure==structure)) {
+    if(cached->scopes.size()>1) {
+      for(const auto& scope:cached->scopes) {
+        JS::RootedObject sample(s.cx,scope.sample->get());
+        if(!styles->PrepareScope(sample)) return false;
+      }
+    }
     pass.previous=cached.get();
     pass.reached.assign(cached->nodes.size(),0);
   }
@@ -334,7 +364,7 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
           pass.restart=true;
     }
   }
-  if(pass.restart) {  // a :has() argument may have changed: lay out without reuse
+  if(pass.restart) {  // Changed :has() inputs or new scope: lay out without reuse.
     *cache=LayoutCache();
     pass.previous=nullptr; pass.restart=false; pass.found=size_t(-1);
     pass.same.clear(); pass.inputs.clear(); pass.dirty.clear(); pass.reached.clear();
@@ -343,8 +373,14 @@ bool LayoutFor(State& s, JS::HandleObject element, std::shared_ptr<const LayoutC
   const size_t found=pass.found;
   if(!box::ComputeBoxLayout(cache->nodes,viewport,&cache->layout,&cache->scrollport))
     return WebKit::Fail(s.cx,"Element box layout budget exceeded");
-  // One cascade scope only: a shadow scope's sheets are outside the fingerprint.
-  if(stamped&&styles->Scopes()<=1) {
+  if(stamped) {
+    JS::RootedObjectVector samples(s.cx);
+    std::vector<uint64_t> stamps;
+    if(!styles->ScopeStamps(&samples,&stamps)) return false;
+    for(size_t i=0;i<samples.length();++i) {
+      auto sample=std::make_unique<JS::PersistentRootedObject>(s.cx,samples[i]);
+      cache->scopes.push_back({std::move(sample),stamps[i]});
+    }
     cache->root=rootKey; cache->focused=focused; cache->revision=revision; cache->styles=stamp;
     cache->fonts=FontConfigGeneration();
     cache->structure=structure; cache->tree=tree;

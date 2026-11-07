@@ -34,6 +34,13 @@ struct LayoutCache {
   std::vector<std::u16string> texts;  // Per node: its text (empty for elements).
   uint64_t fonts=0;  // The font configuration generation the text was measured under.
   std::map<std::pair<uint64_t,uint64_t>,size_t> index;
+  struct ScopeStamp {
+    std::unique_ptr<JS::PersistentRootedObject> sample;
+    uint64_t value;
+  };
+  // Validate every document/shadow cascade before reusing a composed layout.
+  // Samples are rooted for the lifetime of this one cached layout.
+  std::vector<ScopeStamp> scopes;
 };
 // HTMLElement offset* from one layout: border box without transforms, relative
 // to the offset parent's padding edge (or the initial containing block).
