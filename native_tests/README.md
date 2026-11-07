@@ -19,7 +19,10 @@ realms, concurrent Engine sessions, document replacement, host access to closed
 shadow roots and input coordinates/focus inside iframes, borrowed Document
 getters, MouseEvent.which, and screen origins through nested frames, scrolling,
 transforms and hidden ancestors. Local fixtures do
-not establish live token acceptance. The retained Cloudflare application driver
+not establish live token acceptance. Configured owner groups (WebGL, WebGPU,
+permissions, geolocation, speech, media, audio and RTC) are also checked across
+new nested frames, cross-origin navigation, srcdoc and top-level replacements,
+including garbage collection between documents. The retained Cloudflare application driver
 and its API regressions are available on `backup/main-full-20261107` for migration
 to the surrounding application.
 
