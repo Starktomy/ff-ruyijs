@@ -134,6 +134,9 @@ bool WorkerConstructor(JSContext* cx, unsigned argc, JS::Value* vp) {
     // data: scripts run with an opaque origin; other schemes must be same-origin
     // http(s). A refused script is a load failure: the Worker gets `error` later.
     const bool network = resolved.rfind("http:", 0) == 0 || resolved.rfind("https:", 0) == 0;
+    if (!network && resolved.rfind("data:", 0) != 0)
+      return document_model::ThrowException(cx, exception, "SecurityError",
+          ("Worker constructor: Failed to load worker script at \"" + resolved + "\"").c_str());
     blocked = resolved.rfind("data:", 0) != 0 && !(network && sameOrigin);
     url = std::move(resolved);
   }

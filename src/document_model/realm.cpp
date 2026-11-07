@@ -276,6 +276,10 @@ void Realm::SetOffsetGeometryPort(OffsetGeometryPort port, void* context) {
   state_->offsetGeometry = port;
   state_->offsetGeometryContext = context;
 }
+void Realm::SetPointGeometryPort(PointGeometryPort port, void* context) {
+  state_->pointGeometry = port;
+  state_->pointGeometryContext = context;
+}
 void Realm::SetElementScrollPort(const ElementScrollPort& port) {
   state_->elementScroll = port;
   state_->scrollPending.clear();

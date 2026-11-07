@@ -59,12 +59,16 @@ Matrix Transform(const BoxStyle& style, const BoxRect& box) {
   ox+=box[0]; oy+=box[1];
   return Multiply(Multiply({1,0,0,1,ox,oy},result),{1,0,0,1,-ox,-oy});
 }
-}
-BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
-                       const BoxViewport& viewport, size_t target, bool content) {
+Matrix Projection(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes, size_t target) {
   Matrix matrix{1,0,0,1,0,0};
   for(size_t i=target;i!=kNoBox;i=nodes[i].parent)
     matrix=Multiply(Transform(nodes[i].style,boxes[i].border),matrix);
+  return matrix;
+}
+}
+BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
+                       const BoxViewport& viewport, size_t target, bool content) {
+  const auto matrix=Projection(nodes,boxes,target);
   const auto& box=content?boxes[target].content:boxes[target].border;
   double xs[4],ys[4];
   for(unsigned i=0;i<4;++i) {
@@ -88,5 +92,16 @@ BoxRect ProjectBoxRect(const std::vector<BoxNode>& nodes, const std::vector<BoxL
   const double left=edge(horizontal[0]),top=edge(vertical[0]);
   return {double(float(left)),double(float(top)),double(float(edge(horizontal[1])-left)),
           double(float(edge(vertical[1])-top))};
+}
+bool BoxContainsPoint(const std::vector<BoxNode>& nodes, const std::vector<BoxLayout>& boxes,
+                      const BoxViewport& viewport, size_t target, const BoxRect& rect,
+                      double x, double y, bool horizontal, bool vertical) {
+  const auto m=Projection(nodes,boxes,target);
+  const double det=m[0]*m[3]-m[1]*m[2];
+  if(!std::isfinite(det)||det==0) return false;
+  x+=viewport.scroll_x-m[4]; y+=viewport.scroll_y-m[5];
+  const double local_x=(m[3]*x-m[2]*y)/det, local_y=(m[0]*y-m[1]*x)/det;
+  return (!horizontal||(local_x>=rect[0]&&local_x<rect[0]+rect[2])) &&
+         (!vertical||(local_y>=rect[1]&&local_y<rect[1]+rect[3]));
 }
 }

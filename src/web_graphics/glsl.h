@@ -22,6 +22,10 @@ struct GlslDeclaration {
 // One assignment inside main(), e.g. "gl_Position" = "vec4(attrVertex,0,1)".
 struct GlslStatement {
   std::string target, expression;
+  enum class Kind { Assignment, Conditional, Block };
+  Kind kind = Kind::Assignment;
+  std::string declaration;
+  std::vector<GlslStatement> body, otherwise;
 };
 
 // One parsed shader stage: its globals and the assignments of its main().
@@ -50,9 +54,8 @@ inline std::string Trim(const std::string& text) {
 }  // namespace glsl_detail
 
 // Parses a vertex or fragment shader source. Declarations outside the braces and
-// "<target> = <expression>;" assignments inside them are the whole language this
-// evaluator understands; anything else is skipped, which keeps an unsupported
-// shader from drawing rather than drawing wrongly.
+// assignments, local declarations, blocks and if/else inside main(). Unsupported
+// statements fail parsing; control flow is never flattened into unconditional writes.
 bool GlslParse(const std::string& source, GlslStage* stage);
 // The declarations of one kind, in source order.
 std::vector<GlslDeclaration> GlslDeclarations(const GlslStage& stage, const char* kind);

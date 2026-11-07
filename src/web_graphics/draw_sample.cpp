@@ -3,6 +3,7 @@
 // of one pixel. draw.cpp uses these to fill the drawing buffer.
 #include "web_graphics/draw_sample.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -40,9 +41,13 @@ float FloatOf(uint16_t half) {
 }
 }  // namespace
 
-int32_t Unorm8(float component) {
+int32_t Unorm8(float component, bool mesa) {
   if (!(component > 0.0f)) return 0;
   if (component > 1.0f) component = 1.0f;
+  if(mesa) {
+    const double scaled=double(component)*255, low=std::floor(scaled), fraction=scaled-low;
+    return int32_t(low+(fraction>.5||(fraction==.5&&std::fmod(low,2)!=0)));
+  }
   const float mediump = FloatOf(HalfOf(component));
   const double scaled = FloatOf(HalfOf(mediump * 255.0f));
   if (!(scaled > 0.0)) return 0;
@@ -56,7 +61,11 @@ int32_t Unorm8(float component) {
 // except that NVIDIA's 9-bit accumulator keeps the carry while sum+2 is one of
 // the first seven multiples of 64 (64..448). From 512 the carry is lost and the
 // tie rounds down again (sum = 510 -> 127, 702 -> 175).
-int32_t Resolve8(int32_t sum) {
+int32_t Resolve8(int32_t sum, bool mesa) {
+  if(mesa) {
+    const int32_t whole=sum/4,rest=sum%4;
+    return std::min(255,whole+int32_t(rest>2||(rest==2&&(whole&1))));
+  }
   const int32_t half_up = sum + 2;
   int32_t resolved = (sum + 1) >> 2;
   if ((half_up & 63) == 0 && half_up < 512) resolved = half_up >> 2;
@@ -74,16 +83,22 @@ bool InsideEdge(double weight, const double a[2], const double b[2], double sign
   return dy > 0.0 || (dy == 0.0 && dx < 0.0);
 }
 
-int32_t Coverage(const double* a, const double* b, const double* c, int32_t x, int32_t y,
-                 double sign) {
-  int32_t covered = 0;
-  for (const auto& sample : kSamples) {
+uint8_t CoverageMask(const double* a,const double* b,const double* c,int32_t x,int32_t y,double sign) {
+  uint8_t mask=0;
+  for (unsigned i=0;i<4;++i) {
+    const auto& sample=kSamples[i];
     const double sx = x + 0.5 + sample[0] / 16.0, sy = y + 0.5 + sample[1] / 16.0;
     if (!InsideEdge(Edge(a, b, sx, sy), a, b, sign) ||
         !InsideEdge(Edge(b, c, sx, sy), b, c, sign) ||
         !InsideEdge(Edge(c, a, sx, sy), c, a, sign)) continue;
-    ++covered;
+    mask|=uint8_t(1u<<i);
   }
-  return covered;
+  return mask;
+}
+int32_t Coverage(const double* a,const double* b,const double* c,int32_t x,int32_t y,double sign) {
+  const auto mask=CoverageMask(a,b,c,x,y,sign);
+  int32_t count=0;
+  for(unsigned i=0;i<4;++i) if(mask&(1u<<i))++count;
+  return count;
 }
 }  // namespace ruyijs::web_graphics::draw_detail

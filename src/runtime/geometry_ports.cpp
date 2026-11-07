@@ -119,6 +119,9 @@ bool BindGeometryPorts(BrowsingContext& context) {
   boxes.stamp = [](void* raw, JS::HandleObject element, uint64_t* stamp) {
     return static_cast<BrowsingContext*>(raw)->styling->CascadeStamp(element, stamp);
   };
+  boxes.wrap = [](void* raw, document_model::NodeKey key, JS::MutableHandleObject out) {
+    return static_cast<BrowsingContext*>(raw)->document->WrapNode(key, out);
+  };
   boxes.viewport = [](void* raw, double* width, double* height, double* x, double* y) {
     auto& owner = *static_cast<BrowsingContext*>(raw);
     return owner.environment->ReadLayoutViewport(width,height,x,y);
@@ -149,6 +152,10 @@ bool BindGeometryPorts(BrowsingContext& context) {
     return true;
   }, &context);
   context.geometry->SetBoxPorts(boxes);
+  context.document->SetPointGeometryPort([](void* raw, JS::HandleObject root, double x, double y,
+                                           JS::MutableHandleObjectVector out) {
+    return static_cast<BrowsingContext*>(raw)->geometry->ElementsFromPoint(root, x, y, out);
+  }, &context);
   context.document->SetOffsetGeometryPort([](void* raw, JS::HandleObject element,
                                              document_model::OffsetGeometry* out) {
     auto& owner = *static_cast<BrowsingContext*>(raw);

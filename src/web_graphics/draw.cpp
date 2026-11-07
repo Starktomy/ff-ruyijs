@@ -18,7 +18,7 @@ using detail::kObjectDataSlot;
 using detail::kObjectExtraSlot;
 using detail::kObjectFlagSlot;
 using draw_detail::Components;
-using draw_detail::Coverage;
+using draw_detail::CoverageMask;
 using draw_detail::Edge;
 using draw_detail::Interpolate;
 using draw_detail::ReadAttributes;
@@ -31,13 +31,19 @@ struct ShadeEnv {
   Context* context = nullptr;
   std::vector<GlslDeclaration> attributes, uniforms, varyings;
   std::vector<GlslValue> attributeValues, varyingValues;
-  GlslValue uniformValue, colour;
+  struct Local { const std::string* name; GlslValue value; };
+  std::vector<Local> locals;
+  GlslValue uniformValue, colour, position, coordinate;
+  bool colourWritten=false, positionWritten=false;
 };
 
 const GlslValue* Lookup(void* raw, const char* name, size_t length) {
   auto& env = *static_cast<ShadeEnv*>(raw);
   const std::string text(name, length);
+  for(auto i=env.locals.rbegin();i!=env.locals.rend();++i) if(*i->name==text) return &i->value;
   if (text == "gl_FragColor") return &env.colour;
+  if (text == "gl_Position") return &env.position;
+  if (text == "gl_FragCoord") return &env.coordinate;
   for (size_t i = 0; i < env.attributes.size(); ++i)
     if (env.attributes[i].name == text) return &env.attributeValues[i];
   for (size_t i = 0; i < env.varyings.size(); ++i)
@@ -57,23 +63,65 @@ const GlslValue* Lookup(void* raw, const char* name, size_t length) {
 
 // Runs the stage's assignments, storing its varyings and returning the value
 // assigned to gl_Position (vertex stage) or gl_FragColor (fragment stage).
-bool RunStage(const GlslStage& stage, ShadeEnv& env, GlslValue* result) {
-  for (const GlslStatement& statement : stage.statements) {
-    GlslValue value;
-    if (!GlslEvaluate(statement.expression, &Lookup, &env, &value)) return false;
-    if (statement.target == "gl_Position" || statement.target == "gl_FragColor") {
-      *result = value;
+bool Execute(const std::vector<GlslStatement>& statements,ShadeEnv& env,bool scoped) {
+  const size_t begin=env.locals.size();
+  for(const auto& statement:statements) {
+    if(statement.kind==GlslStatement::Kind::Conditional) {
+      GlslValue condition;
+      if(!GlslEvaluate(statement.expression,&Lookup,&env,&condition)||condition.count!=1||
+         !Execute(condition.value[0]?statement.body:statement.otherwise,env,true)) return false;
       continue;
     }
-    bool stored = false;
-    for (size_t i = 0; i < env.varyings.size(); ++i)
-      if (env.varyings[i].name == statement.target) {
-        env.varyingValues[i] = value;
-        stored = true;
+    if(statement.kind==GlslStatement::Kind::Block) {
+      if(!Execute(statement.body,env,true)) return false;
+      continue;
+    }
+    GlslValue value;
+    if(!statement.expression.empty()&&!GlslEvaluate(statement.expression,&Lookup,&env,&value)) return false;
+    const auto dot=statement.target.find('.');
+    const auto name=statement.target.substr(0,dot);
+    GlslValue* target=nullptr;
+    if(!statement.declaration.empty()) {
+      for(size_t i=begin;i<env.locals.size();++i) if(*env.locals[i].name==name) return false;
+      GlslValue initial;
+      initial.count=statement.declaration=="vec4"?4:statement.declaration=="vec3"?3:
+                    statement.declaration=="vec2"?2:1;
+      env.locals.push_back({&statement.target,initial});target=&env.locals.back().value;
+      if(statement.expression.empty()) continue;
+    } else if(name=="gl_Position") {target=&env.position;env.positionWritten=true;}
+    else if(name=="gl_FragColor") {target=&env.colour;env.colourWritten=true;}
+    else {
+      for(auto i=env.locals.rbegin();i!=env.locals.rend();++i)
+        if(*i->name==name){target=&i->value;break;}
+      if(!target)for(size_t i=0;i<env.varyings.size();++i)
+        if(env.varyings[i].name==name){target=&env.varyingValues[i];break;}
+    }
+    if(!target) return false;
+    if(dot==std::string::npos) {
+      if(target->count&&target->count!=value.count) return false;
+      *target=value;
+    } else {
+      const auto fields=statement.target.substr(dot+1);
+      if(fields.size()!=size_t(value.count)) return false;
+      unsigned seen=0;
+      for(size_t i=0;i<fields.size();++i) {
+        const auto at=std::string("xyzw").find(fields[i]);
+        const auto color=std::string("rgba").find(fields[i]);
+        const auto texture=std::string("stpq").find(fields[i]);
+        const auto index=at!=std::string::npos?at:color!=std::string::npos?color:texture;
+        if(index>=size_t(target->count)||(seen&(1u<<index))) return false;
+        seen|=1u<<index;target->value[index]=value.value[i];
       }
-    if (!stored) return false;
+    }
   }
+  if(scoped)env.locals.resize(begin);
   return true;
+}
+bool RunStage(const GlslStage& stage,ShadeEnv& env,bool vertex,GlslValue* result) {
+  env.locals.clear();env.position={};env.colour={};
+  env.position.count=env.colour.count=4;env.positionWritten=env.colourWritten=false;
+  if(!Execute(stage.statements,env,false)||!(vertex?env.positionWritten:env.colourWritten)) return false;
+  *result=vertex?env.position:env.colour;return result->count==4;
 }
 }  // namespace
 
@@ -84,6 +132,7 @@ void ResizeDrawingBuffer(Context& context, int32_t width, int32_t height) {
   context.drawingHeight = nextHeight;
   // A fresh buffer is all zeroes: WebGL's initial clear colour is (0,0,0,0).
   context.drawingBuffer.assign(size_t(next) * size_t(nextHeight) * 4u, 0);
+  context.drawingSamples.clear();
 }
 
 bool DrawTriangleStrip(State& state, Context& context, int32_t first, int32_t count) {
@@ -101,6 +150,14 @@ bool DrawTriangleStrip(State& state, Context& context, int32_t first, int32_t co
   }
   const int32_t width = context.drawingWidth, height = context.drawingHeight;
   if (width <= 0 || height <= 0) return true;
+  const bool mesa=state.model.values().unmasked_vendor.find("Mesa")!=std::string::npos;
+  if(context.drawingSamples.size()!=context.drawingBuffer.size()*4u) {
+    context.drawingSamples.resize(context.drawingBuffer.size()*4u);
+    for(size_t pixel=0;pixel<context.drawingBuffer.size()/4u;++pixel)
+      for(unsigned sample=0;sample<4;++sample)
+        std::copy_n(context.drawingBuffer.data()+pixel*4u,4,
+                    context.drawingSamples.data()+(pixel*4u+sample)*4u);
+  }
   ShadeEnv env;
   env.context = &context;
   env.attributes = GlslDeclarations(vertexStage, "attribute");
@@ -109,28 +166,45 @@ bool DrawTriangleStrip(State& state, Context& context, int32_t first, int32_t co
   // The fragment stage reads the interpolated varyings by name, so a shader pair
   // that declares them in a different order still interpolates the same values.
   std::vector<GlslDeclaration> colours = GlslDeclarations(fragmentStage, "varying");
-  std::vector<size_t> colourSource(colours.size(), 0);
-  for (size_t i = 0; i < colours.size(); ++i)
-    for (size_t j = 0; j < env.varyings.size(); ++j)
-      if (env.varyings[j].name == colours[i].name) colourSource[i] = j;
+  std::vector<size_t> colourSource;
+  colourSource.reserve(colours.size());
+  for (const auto& colour : colours) {
+    const auto source = std::find_if(env.varyings.begin(), env.varyings.end(),
+        [&](const GlslDeclaration& varying) {
+          return varying.name == colour.name && varying.type == colour.type;
+        });
+    // The software linker does not validate the complete shader interface yet.
+    // Never substitute index zero for a missing output: shaded may be empty.
+    if (source == env.varyings.end()) {
+      detail::SetError(context, kInvalidOperation);
+      return true;
+    }
+    colourSource.push_back(size_t(source - env.varyings.begin()));
+  }
   const size_t varyings = env.varyings.size();
   const size_t vertices = size_t(count);
   std::vector<GlslValue> corners(vertices * varyings);
-  std::vector<double> window(vertices * 2u), clipW(vertices);
+  std::vector<double> window(vertices * 2u), clipW(vertices), windowDepth(vertices);
   for (int32_t vertex = 0; vertex < count; ++vertex) {
     if (!ReadAttributes(state.cx, context, env.attributes, first, vertex, &env.attributeValues))
       return false;
     env.varyingValues.assign(varyings, GlslValue());
     GlslValue position;
-    if (!RunStage(vertexStage, env, &position) || position.count != 4) return true;
+    if (!RunStage(vertexStage, env, true, &position)) return true;
     const double clip = position.value[3];
     clipW[size_t(vertex)] = clip;
+    windowDepth[size_t(vertex)]=(double(position.value[2])/clip*.5+.5);
     window[size_t(vertex) * 2] = (double(position.value[0]) / clip * 0.5 + 0.5) * width;
     window[size_t(vertex) * 2 + 1] = (double(position.value[1]) / clip * 0.5 + 0.5) * height;
     for (size_t i = 0; i < varyings; ++i)
       corners[size_t(vertex) * varyings + i] = env.varyingValues[i];
   }
   std::vector<GlslValue> shaded(varyings);
+  ShadeEnv fragment;
+  fragment.context=&context;
+  fragment.uniforms=GlslDeclarations(fragmentStage,"uniform");
+  fragment.varyings=colours;
+  fragment.varyingValues.assign(colours.size(),GlslValue());
   for (int32_t vertex = 0; vertex + 2 < count; ++vertex) {
     const int32_t index[3] = {vertex, vertex + 1, vertex + 2};
     const double* a = &window[size_t(index[0]) * 2];
@@ -147,30 +221,36 @@ bool DrawTriangleStrip(State& state, Context& context, int32_t first, int32_t co
     const int32_t maxY = std::min(height - 1, int32_t(std::ceil(std::max(a[1], std::max(b[1], c[1])))));
     for (int32_t y = minY; y <= maxY; ++y)
       for (int32_t x = minX; x <= maxX; ++x) {
-        const int32_t covered = Coverage(a, b, c, x, y, sign);
-        if (covered == 0) continue;
+        const auto covered = CoverageMask(a, b, c, x, y, sign);
+        if (!covered) continue;
         const double cx = x + 0.5, cy = y + 0.5;
         const double weights[3] = {Edge(b, c, cx, cy) / area, Edge(c, a, cx, cy) / area,
                              Edge(a, b, cx, cy) / area};
         Interpolate(weights, corners, varyings, env.varyings, &shaded);
-        ShadeEnv fragment;
-        fragment.context = &context;
-        fragment.uniforms = GlslDeclarations(fragmentStage, "uniform");
-        fragment.varyings = colours;
-        fragment.varyingValues.assign(colours.size(), GlslValue());
+        fragment.coordinate.count=4;
+        fragment.coordinate.value[0]=float(cx);fragment.coordinate.value[1]=float(cy);
+        fragment.coordinate.value[2]=float(weights[0]*windowDepth[size_t(index[0])]+
+            weights[1]*windowDepth[size_t(index[1])]+weights[2]*windowDepth[size_t(index[2])]);
+        fragment.coordinate.value[3]=float(weights[0]/clipW[size_t(index[0])]+
+            weights[1]/clipW[size_t(index[1])]+weights[2]/clipW[size_t(index[2])]);
         for (size_t i = 0; i < colours.size(); ++i)
           fragment.varyingValues[i] = shaded[colourSource[i]];
         GlslValue colour;
-        if (!RunStage(fragmentStage, fragment, &colour)) return true;
-        // Every covered sample of the pixel carries the same fragment colour (the
-        // D3D11 rasterizer shades once per pixel) and the 4x resolve averages the
-        // four sample slots, so the sum is the colour times the covered count.
+        if (!RunStage(fragmentStage, fragment, false, &colour)) return true;
+        // Shade once per pixel and retain the other sample slots, including
+        // the clear colour and fragments written by earlier triangles.
         uint8_t* pixel = context.drawingBuffer.data() +
                          (size_t(y) * size_t(width) + size_t(x)) * 4u;
         for (int32_t channel = 0; channel < 4; ++channel) {
-          const int32_t sample = channel < colour.count ? Unorm8(colour.value[channel])
+          const int32_t sample = channel < colour.count ? Unorm8(colour.value[channel],mesa)
                                  : channel == 3 ? 255 : 0;
-          pixel[channel] = uint8_t(Resolve8(sample * covered));
+          auto* slots=context.drawingSamples.data()+(size_t(y)*size_t(width)+size_t(x))*16u;
+          int32_t sum=0;
+          for(unsigned slot=0;slot<4;++slot) {
+            if(covered&(1u<<slot)) slots[slot*4u+channel]=uint8_t(sample);
+            sum+=slots[slot*4u+channel];
+          }
+          pixel[channel] = uint8_t(Resolve8(sum,mesa));
         }
       }
   }

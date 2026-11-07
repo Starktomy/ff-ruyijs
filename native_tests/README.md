@@ -33,6 +33,13 @@ auxclick and contextmenu. Trusted input rounds integer mouse coordinates and
 reports the mouse input source while ordinary pointer events retain fractions.
 These local checks do not establish PerimeterX acceptance.
 
+Software shader regressions also check missing and mismatched stage outputs:
+an invalid draw must report `INVALID_OPERATION`, preserve the existing pixels
+and leave the native process available for valid draws. Matching outputs are
+resolved by name even when the stages declare them in different orders. This
+is a defensive rasterizer check; full shader-link validation and full GLSL
+support remain outside the current interpreter subset.
+
 Performance regressions also cover Base64 binary values, invalid encodings,
 rope strings and Worker/iframe error brands; Linux Fontconfig aliases, profile
 changes across contexts and frame retirement; CSSOM mutation and sheet

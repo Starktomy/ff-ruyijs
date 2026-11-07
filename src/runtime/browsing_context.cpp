@@ -178,6 +178,7 @@ BrowsingContext::~BrowsingContext() {
     document->SetFormPorts(nullptr, nullptr, nullptr);
     document->SetImageLoadPort(nullptr, nullptr);
     document->SetOffsetGeometryPort(nullptr, nullptr);
+    document->SetPointGeometryPort(nullptr, nullptr);
     document->SetElementScrollPort({});
     document->SetMediaKeysCheckPort(nullptr, nullptr);
     document->SetTextTrackPorts({});

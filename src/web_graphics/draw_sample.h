@@ -7,12 +7,12 @@ namespace ruyijs::web_graphics::draw_detail {
 extern const double kSamples[4][2];
 // A fragment colour component straight to the attach format: the mediump rounding
 // of the fragment stage, then the UNORM8 conversion with ties rounding down.
-int32_t Unorm8(float component);
+int32_t Unorm8(float component, bool mesa = false);
 // One channel's 4x resolve: the covered sample slots all hold `sample` and the
 // uncovered slots hold the clear zero, so their sum is sample*covered. D3D11's
 // UNORM8 resolve rounds to nearest with ties down, except where the rounded sum
 // lands on one of the low multiples of 64 (see below).
-int32_t Resolve8(int32_t sum);
+int32_t Resolve8(int32_t sum, bool mesa = false);
 // The signed area of (a, b, p), the edge function of the rasterizer.
 double Edge(const double a[2], const double b[2], double x, double y);
 // The D3D11 top-left fill rule: a sample exactly on an edge belongs to the
@@ -21,5 +21,7 @@ bool InsideEdge(double weight, const double a[2], const double b[2], double sign
 // How many of the four samples of pixel (x, y) the triangle covers.
 int32_t Coverage(const double* a, const double* b, const double* c, int32_t x, int32_t y,
                  double sign);
+uint8_t CoverageMask(const double* a, const double* b, const double* c, int32_t x, int32_t y,
+                     double sign);
 }  // namespace ruyijs::web_graphics::draw_detail
 #endif

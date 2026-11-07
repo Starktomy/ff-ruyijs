@@ -40,13 +40,20 @@ bool ClearCall(JSContext* cx, unsigned argc, JS::Value* vp) {
   const bool has_color = GetParameterState(context, 0x0C22, &color);
   const bool has_mask = GetParameterState(context, 0x0C23, &channels);
   uint8_t rgba[4] = {};
+  const bool mesa=state.model.values().unmasked_vendor.find("Mesa")!=std::string::npos;
   for (int channel = 0; channel < 4; ++channel)
-    rgba[channel] = uint8_t(draw_detail::Unorm8(has_color ? float(color.values[channel]) : 0.f));
+    rgba[channel] = uint8_t(draw_detail::Unorm8(has_color ? float(color.values[channel]) : 0.f,mesa));
   for (int64_t y = bottom; y < top; ++y) {
     for (int64_t x = left; x < right; ++x) {
       auto* pixel = context.drawingBuffer.data() + (size_t(y) * size_t(width) + size_t(x)) * 4;
       for (int channel = 0; channel < 4; ++channel)
-        if (!has_mask || channels.values[channel]) pixel[channel] = rgba[channel];
+        if (!has_mask || channels.values[channel]) {
+          pixel[channel] = rgba[channel];
+          if(!context.drawingSamples.empty()) {
+            auto* samples=context.drawingSamples.data()+(size_t(y)*size_t(width)+size_t(x))*16u;
+            for(unsigned sample=0;sample<4;++sample) samples[sample*4u+channel]=rgba[channel];
+          }
+        }
     }
   }
   return SyncCanvasSurface(state, context);

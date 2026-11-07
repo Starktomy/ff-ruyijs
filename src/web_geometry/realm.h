@@ -4,7 +4,7 @@
 #include "js/RootingAPI.h"
 #include "document_model/svg_points_types.h"
 namespace ruyijs { class PageHelpers; }
-namespace ruyijs::document_model { struct GeometryNode; struct LayoutNodeSource; struct OffsetGeometry; struct SvgViewBoxValue; }
+namespace ruyijs::document_model { struct NodeKey; struct GeometryNode; struct LayoutNodeSource; struct OffsetGeometry; struct SvgViewBoxValue; }
 namespace ruyijs::web_styling { struct ComputedStyle; class ComputedStyleReader; }
 namespace ruyijs::web_geometry {
 struct State;
@@ -38,6 +38,7 @@ struct BoxPorts {
                JS::MutableHandleObjectVector) = nullptr;
   bool (*viewport)(void*, double*, double*, double*, double*) = nullptr;
   bool (*stamp)(void*, JS::HandleObject, uint64_t*) = nullptr;  // Cascade fingerprint.
+  bool (*wrap)(void*, document_model::NodeKey, JS::MutableHandleObject) = nullptr;
   void* context = nullptr;
 };
 // The environment's "fonts" group port (font_config.cpp); `context` is the JSContext.
@@ -76,6 +77,7 @@ class Realm final {
   bool SvgLengthViewportSize(double* width, double* height);
   void SetBoxPorts(const BoxPorts&);
   bool MeasureElement(JS::HandleObject, std::array<double, 4>*, bool* present, bool content = false);
+  bool ElementsFromPoint(JS::HandleObject root, double x, double y, JS::MutableHandleObjectVector);
   // Content box in viewport coordinates, for the embedding frame's screen origin.
   bool MeasureContentRect(JS::HandleObject, std::array<double, 4>*, bool* present);
   bool MeasureOffset(JS::HandleObject, document_model::OffsetGeometry*);
