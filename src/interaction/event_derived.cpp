@@ -205,6 +205,7 @@ bool Construct(JSContext* cx, const JS::CallArgs& args, Iface iface, Kind kind) 
   if (!InitEventFields(cx, iface, args.get(1), object)) return false;
   auto event = std::make_unique<Event>(cx, object, type, std::move(key), bubbles, cancelable);
   event->kind = kind;
+  NormalizeMouseCoordinates(*event);
   event->value.set_composed(composed);
   event->value.set_time_stamp(state->EventTime());
   state->events.push_back(std::move(event));

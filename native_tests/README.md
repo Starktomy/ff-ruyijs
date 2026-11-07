@@ -26,6 +26,13 @@ including garbage collection between documents. The retained Cloudflare applicat
 and its API regressions are available on `backup/main-full-20261107` for migration
 to the surrounding application.
 
+Mouse-family precision checks compare 27 public constructor cases against
+Firefox 159 in the top document and an iframe. MouseEvent/WheelEvent coordinates
+floor on construction; PointerEvent preserves fractions except for click,
+auxclick and contextmenu. Trusted input rounds integer mouse coordinates and
+reports the mouse input source while ordinary pointer events retain fractions.
+These local checks do not establish PerimeterX acceptance.
+
 Performance regressions also cover Base64 binary values, invalid encodings,
 rope strings and Worker/iframe error brands; Linux Fontconfig aliases, profile
 changes across contexts and frame retirement; CSSOM mutation and sheet

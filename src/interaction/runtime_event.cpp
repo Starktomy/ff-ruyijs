@@ -80,6 +80,9 @@ bool FireRuntimeEvent(State& state, JS::HandleObject target, const char* interfa
   event->kind = kind;
   event->value.set_composed(composed);
   if (trusted) event->value.mark_trusted();
+  NormalizeMouseCoordinates(*event);
+  if (hostInput && trusted && IsA(kind, Iface::Mouse) && !IsA(kind, Iface::Pointer))
+    JS::SetReservedSlot(object, kEventInputSource, JS::Int32Value(1));
   event->value.set_time_stamp(state.EventTime(time_ms));
   Event& entry = *event;
   state.events.push_back(std::move(event));

@@ -1,12 +1,32 @@
 // Event coordinate projections. The event's existing slots remain the only
 // data source; no layout, scrolling, pointer state or secondary factory.
 #include "interaction/internal.h"
+#include "interaction/event_creation.h"
 #include "runtime/page_helpers.h"
 #include "js/Conversions.h"
 #include "js/Object.h"
 #include "js/PropertyAndElement.h"
+#include <cmath>
+#include <string_view>
 
 namespace ruyijs::interaction {
+void NormalizeMouseCoordinates(Event& event) {
+  if (!IsA(event.kind, Iface::Mouse)) return;
+  if (IsA(event.kind, Iface::Pointer)) {
+    // Text() stores dispatch keys as UTF-16 bytes, including runtime input.
+    const std::string_view type = event.value.type().value();
+    bool integer = false;
+    for (std::u16string_view name : {u"click", u"auxclick", u"contextmenu"})
+      integer |= type == std::string_view(reinterpret_cast<const char*>(name.data()),
+                                         name.size() * sizeof(char16_t));
+    if (!integer) return;
+  }
+  const double bias = event.value.is_trusted() ? 0.5 : 0.0;
+  for (uint32_t slot : {kEventClientX, kEventClientY, kEventScreenX, kEventScreenY}) {
+    const double value = JS::GetReservedSlot(event.object, slot).toNumber();
+    JS::SetReservedSlot(event.object, slot, JS::DoubleValue(std::floor(value + bias)));
+  }
+}
 namespace {
 bool Coordinate(JSContext* cx, const JS::CallArgs& args, Iface iface,
                  const char* name, uint32_t slot, bool integer, bool negative) {
