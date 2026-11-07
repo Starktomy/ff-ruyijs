@@ -39,6 +39,8 @@ class Realm final {
   // A document replaced in this realm (host `load`) starts without policies.
   void Reset();
   bool Enforcing() const;
+  bool RequiresTrustedTypes() const;
+  bool AllowsTrustedPolicy(const std::string& name, bool duplicate) const;
   // The page-load coordinator brackets parsing: reports made meanwhile are
   // delivered at EndParse, before the document's lifecycle events.
   void BeginParse();

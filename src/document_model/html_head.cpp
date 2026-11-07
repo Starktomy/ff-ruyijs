@@ -2,6 +2,7 @@
 #include "js/Conversions.h"
 #include "js/PropertyAndElement.h"
 #include "js/Realm.h"
+#include <cstring>
 
 namespace ruyijs::document_model {
 namespace {
@@ -85,10 +86,14 @@ bool Write(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto* entry = ControlReceiver(cx, args.thisv(), m.iface);
   if (!entry) return false;
   DomString text; bool present = true;
-  if (m.kind == Boolean) present = JS::ToBoolean(args.get(0));
+  auto& state = *entry->owner;
+  const bool scriptUrl = m.kind == Url && std::strcmp(m.iface, "HTMLScriptElement") == 0;
+  if (scriptUrl || m.kind == ScriptText) {
+    const std::string sink = std::string("HTMLScriptElement ") + m.name;
+    if (!TrustedString(state, args.get(0), scriptUrl ? 2 : 1, sink.c_str(), &text)) return false;
+  } else if (m.kind == Boolean) present = JS::ToBoolean(args.get(0));
   else if (m.kind == BaseString) { if (!String(cx, args.get(0), &text)) return false; }
   else if (!(m.kind == LinkCors && args.get(0).isNull()) && !ControlString(cx, args.get(0), &text)) return false;
-  auto& state = *entry->owner;
   {
     JSAutoRealm realm(cx, state.page);
     state.Observe(m.iface, m.name, int(ApiAccess::Write));

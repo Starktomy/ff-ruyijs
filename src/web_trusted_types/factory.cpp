@@ -1,11 +1,13 @@
 // TrustedTypePolicyFactory: the one per-realm `trustedTypes` object.
-// Behaviour follows TrustedTypePolicyFactory.cpp; CSP enforcement is absent (D127).
+// Behaviour follows TrustedTypePolicyFactory.cpp, including receiver realm and CSP policy names.
 #include "web_trusted_types/internal.h"
 #include "runtime/page_helpers.h"
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "js/CallAndConstruct.h"
 #include "js/Conversions.h"
+#include "js/CharacterEncoding.h"
+#include <algorithm>
 #include "js/Object.h"
 #include "js/PropertyAndElement.h"
 #include "js/String.h"
@@ -46,10 +48,10 @@ bool Factory(JSContext* cx, const JS::CallArgs& args, const char* member,
 }
 bool CreatePolicy(JSContext* cx, unsigned argc, JS::Value* vp) {
   auto args = JS::CallArgsFromVp(argc, vp);
-  State& state = Self(args);
   JS::RootedObject self(cx);
   if (!Factory(cx, args, "createPolicy", &self) ||
       !Arity(cx, args, 1, "TrustedTypePolicyFactory.createPolicy")) return false;
+  State& state = *static_cast<State*>(JS::GetReservedSlot(self, FactoryOwner).toPrivate());
   JS::RootedString name(cx, JS::ToString(cx, args[0]));
   if (!name) return false;
   JS::RootedValueArray<3> callbacks(cx);
@@ -73,6 +75,12 @@ bool CreatePolicy(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (!JS_StringEqualsAscii(cx, name, "default", &isDefault)) return false;
   if (isDefault && current.isObject())
     return Fail(cx, "TrustedTypePolicyFactory.createPolicy: Tried to create a second default policy");
+  JS::UniqueChars bytes(JS_EncodeStringToUTF8(cx, name));
+  if (!bytes) return false;
+  const std::string policyName(bytes.get());
+  const bool duplicate = std::find(state.policyNames.begin(), state.policyNames.end(), policyName) != state.policyNames.end();
+  if (state.allowsPolicy && !state.allowsPolicy(state.securityContext, policyName, duplicate))
+    return Fail(cx, "TrustedTypePolicyFactory.createPolicy: Policy name is disallowed by Content Security Policy");
   JS::RootedObject policy(cx);
   {
     JSAutoRealm realm(cx, state.kit.page);
@@ -84,6 +92,7 @@ bool CreatePolicy(JSContext* cx, unsigned argc, JS::Value* vp) {
     if (!policy) return false;
     if (isDefault) JS::SetReservedSlot(self, FactoryDefault, JS::ObjectValue(*policy));
   }
+  state.policyNames.push_back(policyName);
   args.rval().setObject(*policy);
   return JS_WrapValue(cx, args.rval());
 }
@@ -182,6 +191,7 @@ bool InstallFactory(State& state, JS::HandleObject globalTarget, const char* glo
   JS::RootedObject getter(cx, state.kit.Function(Global, "get trustedTypes", 0, 0)), setter(cx);
   if (!state.factory || !html || !script || !getter) return false;
   JS::SetReservedSlot(state.factory, FactoryDefault, JS::NullValue());
+  JS::SetReservedSlot(state.factory, FactoryOwner, JS::PrivateValue(&state));
   JS::SetReservedSlot(state.factory, FactoryEmptyHTML, JS::ObjectValue(*html));
   JS::SetReservedSlot(state.factory, FactoryEmptyScript, JS::ObjectValue(*script));
   return JS_DefineProperty(cx, globalTarget, "trustedTypes", getter, setter, JSPROP_ENUMERATE) &&
