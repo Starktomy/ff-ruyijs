@@ -14,6 +14,7 @@ from ruyijs import Context
 
 
 @unittest.skipUnless((ROOT / "dist/js").is_file(), "build native runtime first")
+@unittest.skipUnless(sys.platform == "linux" and shutil.which("fc-match"), "Linux Fontconfig is required")
 class FontTests(unittest.TestCase):
     def test_fontconfig_alias_preferred_and_default_bindings(self):
         with tempfile.TemporaryDirectory() as directory:

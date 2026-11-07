@@ -26,5 +26,14 @@ including garbage collection between documents. The retained Cloudflare applicat
 and its API regressions are available on `backup/main-full-20261107` for migration
 to the surrounding application.
 
+Performance regressions also cover Base64 binary values, invalid encodings,
+rope strings and Worker/iframe error brands; Linux Fontconfig aliases, profile
+changes across contexts and frame retirement; CSSOM mutation and sheet
+replacement/adoption; and nested shadow layout reuse, hidden scope revelation,
+custom properties and inherited reset properties. Media-dependent computed
+blocks must refresh after an enclosing frame resize even when the child DOM
+revision is unchanged. See [PERFORMANCE.md](PERFORMANCE.md) for the measured
+resource comparison and the rendering equivalence checks.
+
 The previous full fork, its broader compatibility and performance changes, and
 its network regression suite remain in `backup/main-full-20261107`.

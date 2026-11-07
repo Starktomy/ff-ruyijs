@@ -1,5 +1,9 @@
 # Minimal kernel validation, 2026-11-07
 
+This records the earlier minimal-kernel baseline. The subsequent native
+performance restoration and its separate validation are documented in
+[PERFORMANCE.md](PERFORMANCE.md). The historical results below are unchanged.
+
 This main starts from upstream 0.3.5, commit
 `0ab720142361ed2fafd42224f2c2772dc5d1f219`. The previous full fork is preserved
 locally and remotely as `backup/main-full-20261107` at `158eae7`.
