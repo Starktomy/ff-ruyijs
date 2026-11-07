@@ -1,4 +1,5 @@
 #include "document_model/state.h"
+#include "browser_environment/cross_origin.h"
 #include "js/Realm.h"
 
 namespace ruyijs::document_model {
@@ -25,7 +26,11 @@ bool Read(JSContext* cx, unsigned argc, JS::Value* vp) {
       if (node.shadow_root.node) {
         ShadowSnapshot root;
         if (!owner.Check(owner.model.InspectShadow(node.shadow_root, &root))) return false;
-        if (!root.options.closed && !owner.Wrap(node.shadow_root, &result)) return false;
+        // Like the cross-origin inspector, a directly executing host script
+        // may inspect the original tree. Page functions retain closed-root
+        // encapsulation even when called by the host.
+        if ((!root.options.closed || browser_environment::HostCaller(cx)) &&
+            !owner.Wrap(node.shadow_root, &result)) return false;
       }
     }
   }

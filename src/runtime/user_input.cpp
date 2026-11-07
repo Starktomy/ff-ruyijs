@@ -114,14 +114,23 @@ bool UserInputRequest(JSContext* cx, TopLevel& top, JS::HandleObject request,
     if (!value.isObject()) return resource_wire::Error(cx, "User input target is not an element");
     target = &value.toObject();
   }
+  // Expressions can resolve nodes in a child realm (including closed shadow
+  // trees). Measure and read focus in that node's current document, just as
+  // trusted-event dispatch already chooses the target's Interaction owner.
+  BrowsingContext* input = &active;
+  if (target && active.frames) {
+    auto* document = active.document->InputDocument(target);
+    auto* owner = document ? active.frames->FindCurrentDocument(*document) : nullptr;
+    if (owner) input = owner;
+  }
   scheduling.Freeze();
   if (action == "click") {
     if (!target) return resource_wire::Error(cx, "click needs a target");
-    if (!Click(cx, active, target, hold, scheduling)) return false;
+    if (!Click(cx, *input, target, hold, scheduling)) return false;
   } else if (action == "type" || action == "press") {
     if (target && !document_model::FocusElement(cx, target)) return false;
     JS::RootedObject focused(cx);
-    if (!active.document->ActiveElement(&focused)) return false;
+    if (!input->document->ActiveElement(&focused)) return false;
     if (!focused) return resource_wire::Error(cx, "No element has focus");
     if (action == "press") {
       if (!resource_wire::Property(cx, request, "key", &key, 32, resource_wire::TextKind::ASCII) ||
@@ -136,7 +145,7 @@ bool UserInputRequest(JSContext* cx, TopLevel& top, JS::HandleObject request,
       if (!JS_CopyStringChars(cx, mozilla::Range<char16_t>(chars.data(), chars.size()), string)) return false;
       for (size_t i = 0; i < chars.size(); ++i) {
         if (i) scheduling.Pass(interval);
-        if (!active.document->ActiveElement(&focused) || !focused) break;
+        if (!input->document->ActiveElement(&focused) || !focused) break;
         if (!user_input::Character(cx, focused, chars[i], scheduling)) return false;
       }
     }
