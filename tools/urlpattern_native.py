@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tomllib
 from pathlib import Path
+from cargo_artifacts import target_rlibs
 
 def target_triple(native):
     return native.donor.rust_target
@@ -102,6 +103,7 @@ def build(native):
     if target_dir.exists():
         shutil.rmtree(target_dir)
     command = [cargo, 'build', '--release', '--offline', '--locked', '--target', target_triple(native),
+               '--message-format=json-render-diagnostics',
                '--manifest-path', str(source / 'Cargo.toml'), '--target-dir', str(target_dir),
                '--config', "source.crates-io.replace-with='donor'",
                '--config', "source.donor.directory='" + mirror.as_posix() + "'"]
@@ -109,7 +111,7 @@ def build(native):
     (directory / 'cargo.log').write_text(completed.stdout + completed.stderr, 'utf8')
     if completed.returncode:
         raise RuntimeError('urlpattern cargo build: ' + (completed.stdout + completed.stderr)[-10000:])
-    rlibs = sorted(str(p) for p in (target_dir / target_triple(native) / 'release/deps').glob('*.rlib'))
+    rlibs = [str(p) for p in target_rlibs(completed.stdout, target_dir / target_triple(native) / 'release')]
     if library.exists():
         library.unlink()
     archived = subprocess.run(native.archive(library, rlibs), cwd=directory, env=env,

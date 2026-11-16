@@ -87,7 +87,9 @@ jobs:
           } | sha256sum | awk '{print "hash=" substr($1,1,16)}' >> "$GITHUB_OUTPUT"
 
       - name: ABI gate regression tests
-        run: python3 -B -m unittest discover -s tests -p test_linux_wheel_abi.py -v
+        run: |
+          python3 -B -m unittest discover -s tests -p test_linux_wheel_abi.py -v
+          python3 -B -m unittest discover -s tests -p test_cargo_artifacts.py -v
 
       # Besides the Firefox commit, the objdir depends only on the donor step of
       # build.sh (its configure options), so changes to the other steps keep it.

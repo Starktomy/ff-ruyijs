@@ -18,6 +18,7 @@
 /tests/*
 !/tests/test_macos_runtime.py
 !/tests/test_linux_wheel_abi.py
+!/tests/test_cargo_artifacts.py
 # Only the native build and wheel tools are public; audit/probe tools stay local.
 /tools/*
 !/tools/README.md
@@ -25,6 +26,7 @@
 !/tools/binding_order.py
 !/tools/build.py
 !/tools/build_linux.py
+!/tools/cargo_artifacts.py
 !/tools/build_necko_linux.py
 !/tools/build_necko_darwin.py
 !/tools/build_neqo_linux.py
