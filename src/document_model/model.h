@@ -139,6 +139,13 @@ struct MutationNotice {
   bool has_old_value = false;            // Attributes / CharacterData.
   DomString old_value;                   // Value before the change.
 };
+struct ChangedElement {
+  size_t index = 0;
+  uint64_t attributes = 0;
+  DomString inline_style;
+  std::vector<AttributeSnapshot> attribute_list;
+  bool attributes_changed = false, style_changed = false;
+};
 
 
 // All DTOs are short-lived snapshots. Native never retains business-state copies.
@@ -278,12 +285,29 @@ class Model final {
 
 
   Status Inspect(NodeKey node, NodeSnapshot* result) const noexcept;
+  // Inspect limited to the parts a getter reads. key, kind, document_mode,
+  // owner_document and the shadow links are always filled; the rest only for
+  // the requested parts. kInspectSiblings scans the parent's child list and
+  // kInspectRoots walks the ancestors, so a getter asks only for what it uses (#35).
+  static constexpr uint32_t kInspectNames = 1, kInspectTree = 2, kInspectSiblings = 4,
+                            kInspectRoots = 8, kInspectValue = 16, kInspectAll = 31;
+  Status Inspect(NodeKey node, NodeSnapshot* result, uint32_t parts) const noexcept;
   // The node type only. Interface receivers use this instead of Inspect,
   // which also names siblings and copies strings they do not read.
   Status Kind(NodeKey node, NodeKind* result) const noexcept;
   // The fields ReadLayoutNode keeps. Skips the sibling scan and the name,
   // namespace, and doctype strings Inspect copies and layout does not read.
   Status InspectLayout(NodeKey node, NodeSnapshot* result) const noexcept;
+  // Walks composed element ancestors to the layout root without copying child lists.
+  Status InspectLayoutRoot(NodeKey node, NodeKey* root, NodeKey* composed_root,
+                           bool* connected, bool* budget_exceeded) const noexcept;
+  // Scans rendered elements against cached inline styles and non-style attribute hashes.
+  Status ChangedElements(const std::vector<NodeKey>& keys, const std::vector<char>& elements,
+                         const std::vector<uint64_t>& previous_attributes,
+                         const std::vector<DomString>& previous_styles, bool style_only,
+                         std::vector<ChangedElement>* changed) const noexcept;
+  // Ordered <style> and HTML <link> descendants of `scope` without sibling scans.
+  Status SheetElements(NodeKey scope, std::vector<NodeKey>* result) const noexcept;
   Status CreateElementNS(NodeKey document, DomStringView namespace_uri,
                         DomStringView qualified_name, const std::optional<DomString>& is,
                         Draft* result) noexcept;
@@ -461,6 +485,8 @@ class Model final {
   Status SetCustomValidity(NodeKey, DomStringView value) noexcept;
   Status LabelControl(NodeKey, NodeKey* result) const noexcept;
   Status MeterValue(NodeKey, DomStringView name, double* result) const noexcept;
+  // meter_value for a <meter>, progress_value for a <progress> (max, value, position).
+  Status GaugeValue(NodeKey, DomStringView name, double* result) const noexcept;
   Status HeadAttribute(NodeKey, DomStringView name, std::optional<DomString>* result) const noexcept;
   Status ContentAttribute(NodeKey, DomStringView name, DomString* result) const noexcept;
   Status SetContentAttribute(NodeKey, DomStringView name, DomStringView value) noexcept;
@@ -470,6 +496,9 @@ class Model final {
   Status AnchorPolicy(NodeKey, DomString* result) const noexcept;
   Status SetAnchorPolicy(NodeKey, DomStringView value) noexcept;
   Status SetMeterValue(NodeKey, DomStringView name, double value) noexcept;
+  // The reflected double write; a <progress> ignores a max that is not positive
+  // and a value below zero is stored as written (HTML §4.10.13).
+  Status SetGaugeValue(NodeKey, DomStringView name, double value) noexcept;
   Status InputText(NodeKey, DomStringView name, DomString* result) const noexcept;
   Status SetInputValue(NodeKey, DomStringView value) noexcept;
   Status ResetInputValues(NodeKey form) noexcept;

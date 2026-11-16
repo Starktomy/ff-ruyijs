@@ -1,10 +1,21 @@
 #pragma once
-#include <memory>
 #include <array>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 #include "js/RootingAPI.h"
 #include "document_model/svg_points_types.h"
 namespace ruyijs { class PageHelpers; }
-namespace ruyijs::document_model { struct NodeKey; struct GeometryNode; struct LayoutNodeSource; struct OffsetGeometry; struct SvgViewBoxValue; }
+namespace ruyijs::document_model {
+struct NodeKey;
+struct ChangedElement;
+struct GeometryNode;
+struct LayoutHeadSource;
+struct LayoutNodeSource;
+struct OffsetGeometry;
+struct SvgViewBoxValue;
+}
 namespace ruyijs::web_styling { struct ComputedStyle; class ComputedStyleReader; }
 namespace ruyijs::web_geometry {
 struct State;
@@ -36,9 +47,14 @@ struct BoxPorts {
   std::unique_ptr<web_styling::ComputedStyleReader> (*styles)(void*) = nullptr;
   bool (*node)(void*, JS::HandleValue, document_model::LayoutNodeSource*, JS::MutableHandleObject,
                JS::MutableHandleObjectVector) = nullptr;
+  bool (*head)(void*, JS::HandleValue, document_model::LayoutHeadSource*, JS::MutableHandleObject) = nullptr;
+  bool (*changedElements)(void*, JS::HandleValue, const std::vector<document_model::NodeKey>&,
+                          const std::vector<char>&, const std::vector<uint64_t>&,
+                          const std::vector<std::u16string>&, bool,
+                          std::vector<document_model::ChangedElement>*) = nullptr;
+  bool (*wrap)(void*, JS::HandleValue, document_model::NodeKey, JS::MutableHandleObject) = nullptr;
   bool (*viewport)(void*, double*, double*, double*, double*) = nullptr;
   bool (*stamp)(void*, JS::HandleObject, uint64_t*) = nullptr;  // Cascade fingerprint.
-  bool (*wrap)(void*, document_model::NodeKey, JS::MutableHandleObject) = nullptr;
   void* context = nullptr;
 };
 // The environment's "fonts" group port (font_config.cpp); `context` is the JSContext.
@@ -81,6 +97,16 @@ class Realm final {
   // Content box in viewport coordinates, for the embedding frame's screen origin.
   bool MeasureContentRect(JS::HandleObject, std::array<double, 4>*, bool* present);
   bool MeasureOffset(JS::HandleObject, document_model::OffsetGeometry*);
+  // The used box of an element for getComputedStyle resolved values (#42):
+  // content width and height, padding, margin and border widths (top, right,
+  // bottom, left), and the relative or absolute insets. *present is false for
+  // an element without a box (not rendered, display:none, inline).
+  struct UsedBox {
+    double width = 0, height = 0;
+    std::array<double, 4> padding{}, margin{}, border{};
+    std::array<double, 4> inset{};
+  };
+  bool MeasureUsed(JS::HandleObject, UsedBox*, bool* present);
   // An element scroll container's position (box_scroll.cpp): read, or with
   // |write| clamp and store (*changed when it moved). 0,0 for a non-container.
   bool ElementScroll(JS::HandleObject, bool write, double* x, double* y, bool* changed);

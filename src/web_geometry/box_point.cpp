@@ -101,9 +101,11 @@ bool Realm::ElementsFromPoint(JS::HandleObject root,double x,double y,JS::Mutabl
   std::sort(hits.begin(),hits.end(),[](const auto& a,const auto& b){return a.order>b.order;});
   // CSSOM View appends the document root even when its own box is empty.
   hits.push_back({found,{}});
+  JS::RootedValue rootValue(state.cx,JS::ObjectValue(*root));
   for(const auto& hit:hits) {
     JS::RootedObject object(state.cx);
-    if(!state.boxPorts.wrap(state.boxPorts.context,cache->keys[hit.index],&object)||!out.append(object)) return false;
+    if(!state.boxPorts.wrap(state.boxPorts.context,rootValue,cache->meta->keys[hit.index],&object)||
+       !out.append(object)) return false;
   }
   return true;
 }

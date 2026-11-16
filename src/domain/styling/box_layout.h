@@ -69,6 +69,11 @@ struct BoxNode {
   // text_height is the primary font content area (inline box height);
   // line_height is the text's contribution to its line box.
   double text_width = 0, text_height = 0, line_height = -1, intrinsic_width = -1, intrinsic_height = -1;
+  // Breakable text: the max-content width of each word and of one space, so
+  // the flow can break the line greedily at a fixed content width (#42).
+  std::vector<float> words;
+  double word_space = 0;
+  size_t column_span = 1;  // A table cell's colspan attribute.
   // HTML width/height attribute percentages (presentational hints that apply
   // when the author's width/height is auto), and an iframe frameborder="0"/"no".
   double attribute_width_percent = -1, attribute_height_percent = -1;
@@ -97,9 +102,34 @@ struct BoxLayout {
 // The viewport scroll frame: the scrollport (client) size and the root's
 // scrollable overflow (scroll) size, at least the scrollport.
 struct BoxScrollport { double client_width = 0, client_height = 0, scroll_width = 0, scroll_height = 0; };
+// Per-element constraint and relative-origin record from one layout pass, for
+// reusing unchanged subtrees on a subsequent mutation or scrollbar pass.
+struct BoxPlaceRecord {
+  double cb_w = 0, cb_h = 0, forced_w = 0, forced_h = 0;
+  double rel_bx = 0, rel_by = 0, collapse_shift = 0;
+  bool definite_height = false, parent_bfc = false, valid = false;
+};
+struct BoxLayoutCache {
+  double viewport_width = 0, viewport_height = 0;
+  size_t overflow_source = 0;
+  std::vector<BoxLayout> boxes;
+  std::vector<double> leading, trailing, min_content, max_content;
+  std::vector<char> empty_flow, self_collapse;
+  std::vector<BoxPlaceRecord> places;
+};
+struct BoxReuseInput {
+  const std::vector<BoxNode>* previous_nodes = nullptr;
+  const BoxLayoutCache* cache = nullptr;
+  const std::vector<size_t>* before = nullptr;
+  const std::vector<char>* same_node = nullptr;
+  const BoxLayoutCache* fallback_cache = nullptr;
+  const std::vector<size_t>* fallback_before = nullptr;
+  const std::vector<char>* fallback_clean = nullptr;
+};
 // Call-scoped projection: no node identity, retained tree, renderer or engine dependency.
 bool ComputeBoxLayout(const std::vector<BoxNode>&, const BoxViewport&, std::vector<BoxLayout>*,
-                      BoxScrollport* scrollport = nullptr);
+                      BoxScrollport* scrollport = nullptr, const BoxReuseInput* reuse = nullptr,
+                      BoxLayoutCache* cache_out = nullptr);
 // Whether a box is a scroll container (overflow other than visible/clip on an
 // axis). The root and a body whose overflow propagates to the viewport are not.
 bool BoxScrollContainer(const std::vector<BoxNode>&, size_t);
@@ -107,6 +137,10 @@ bool BoxScrollContainer(const std::vector<BoxNode>&, size_t);
 // descendant that is not itself a scroll container.
 void BoxOverflowExtent(const std::vector<BoxNode>&, const std::vector<BoxLayout>&, size_t index,
                        double* right, double* bottom);
+// Whether a node is a replaced element (img, iframe, canvas, video, ...), and
+// one length of its style against a percentage basis (box_layout_values.cpp).
+bool BoxReplacedNode(const BoxNode&);
+double BoxLengthOf(const BoxStyle&, const std::string&, double percent, double fallback);
 BoxRect ProjectBoxRect(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
                        const BoxViewport&, size_t target, bool content = false);
 bool BoxContainsPoint(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,

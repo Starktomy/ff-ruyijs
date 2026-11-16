@@ -3,6 +3,92 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.4.1] - 2026-11-16
+
+### Added
+
+- SOCKS proxies on Windows and Linux: `Context(proxy=...)` accepts `socks5://`, `socks5h://`, `socks4://`
+  and `socks4a://` URLs, with `socks5://user:pass@host:port` for username/password authentication
+  (RFC 1928/1929), as Firefox speaks them. Only HTTP(S) proxy URLs were accepted, although the README
+  listed SOCKS5 (#39). `ci/socks_proxy_check.py` loads pages through a local SOCKS server; the Windows
+  runtime now takes `ruyijs_necko/oneshot.py` from the repository, as Linux and macOS do.
+
+### Fixed
+
+- A Wildberries (wbaas / Guardium) challenge scored every ruyijs session risk 100 and kept the seller
+  page at 498; it now scores 15, as Firefox 160 does on the same network, and the page loads (#42). The
+  challenge measures the page, and these read differently from Firefox:
+  - `getComputedStyle` returned specified values for a rendered element's `width`, `height`, `padding-*`,
+    `margin-*` and insets (`calc(33.3% + 0.7px)`, `25%`, `auto`); it returns the used pixel values.
+  - `white-space: pre` collapsed runs of spaces when measuring; text in a narrow block never wrapped, so
+    a block was always one line tall.
+  - A float and a table filled their containing block instead of shrinking to fit; a table had no row
+    and cell layout (cells stacked as blocks, no `border-spacing`, no UA cell padding).
+  - `aspect-ratio` did not size a box with an auto height.
+  - `HTMLProgressElement.value`, `max` and `position` threw.
+  `ci/layout_fingerprint_check.py` compares these against Firefox 160's values.
+- `nodeType`, `tagName` and the other Node and Element property reads no longer slow down with the node's
+  position among its siblings: each read built a full snapshot, including a scan of the parent's
+  children, and every property lookup on a node asked whether it is a form. 32,768 siblings, 100,000
+  `nodeType` reads of the last child: 2,268 ms to 28 ms (#35).
+
+- Registering, clearing and running many timers no longer slows down with the square of their number: every
+  `setTimeout` re-sorted the whole task queue, and lookup, `clearTimeout` and completion scanned it and the
+  callback list. The queue is now indexed by task id and kept in deadline order, and callbacks are indexed by
+  id and by public handle; the run order is unchanged. 8,000 timers on the logical clock: register 945 ms to
+  13 ms, clear 984 ms to 7 ms, run 1,309 ms to 12 ms (#34). `ci/timer_scale_check.py` checks the scaling on
+  Windows, macOS and Linux.
+
+## [0.4.0] - 2026-11-14
+
+### Changed
+
+- Firefox 160.0. The wheels are built from the official Firefox 160.0 release (`firefox/` submodule at
+  `FIREFOX_160_0_RELEASE`), and the Windows Necko transport is necko-standalone 0.8.3 (NSS 3.132, Neqo
+  0.33.0), with the local HTTP/1.1 and HTTP/3 patches re-applied and both native libraries rebuilt. The
+  User-Agent is `rv:160.0 … Firefox/160.0`, `tls=` accepts 100–160 and defaults to 160, and
+  `ci/hello_check.py` compares against a ClientHello captured from the official Firefox 160.0 build (the
+  same as 159's in every compared field). The macOS runtime is unchanged.
+- The web platform surface follows Firefox 160 on Windows: the speech recognition interfaces
+  (`SpeechRecognition`, `SpeechGrammar`, `SpeechGrammarList` with their `webkit` aliases,
+  `SpeechRecognitionAlternative`, `SpeechRecognitionErrorEvent`, `SpeechRecognitionEvent`,
+  `SpeechRecognitionPhrase`, `SpeechRecognitionResult`, `SpeechRecognitionResultList`, and
+  `SpeechRecognition.available()` / `install()`); `WebTransport.responseHeaders`;
+  `WebTransportDatagramDuplexStream.incomingMaxBufferedDatagrams` / `outgoingMaxBufferedDatagrams` in place of
+  the high-water marks; the `Highlight` and `HighlightRegistry` member order. With no recognition service,
+  `start()` waits as Firefox does without a model or a microphone.
+- Geometry reads after an inline style or attribute change reuse the unchanged parts of the last layout
+  instead of laying out the whole page again: 1,500 siblings, `offsetHeight` after `setAttribute` 213 ms
+  to 0.5 ms (#13, PR #33 by ladydd).
+
+### Fixed
+
+- Aborting an in-flight `fetch()` with an `AbortController`, or calling `XMLHttpRequest.abort()` / `open()`,
+  stops the response transfer: the Necko helper carrying the request ends and the server sees the
+  connection close. The request was rejected but its response kept downloading to the end (#43).
+- Changing a text node with `data`, `nodeValue`, `appendData`, `replaceData` and the other CharacterData
+  methods updates later geometry reads; they returned the layout from before the change.
+
+## [0.3.7] - 2026-11-10
+
+### Fixed
+
+- Page timers, posted messages and animation frames run while the `load` event waits on slow images or style
+  sheets. A 50 ms `setTimeout` on a page with a 2 s image ran after the image and after `load`; it now runs
+  at about 50 ms, and `load` still fires once the image is done, as in Firefox (#31).
+
+## [0.3.6] - 2026-11-07
+
+### Fixed
+
+- Aborting a fetch that is still in flight rejects it with `AbortError` instead of crashing `js.exe`
+  (0xC0000005 on Windows, "pipe closed during a frame" on Linux). Pages that abort pending fetches, such as
+  Twitch's login page with its Kasada SDK, now load (#30).
+- A pending Web Animations play/pause task and the finish timer run; they never matched their own callback
+  before and so never fired.
+
 ## [0.3.5] - 2026-11-06
 
 ### Changed
