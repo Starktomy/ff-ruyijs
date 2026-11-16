@@ -46,6 +46,11 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Trust the checked-out repositories in the container
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/firefox"
+
       - name: Fetch Firefox (the submodule commit only)
         id: firefox
         run: |
