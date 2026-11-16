@@ -59,7 +59,9 @@ deps 步骤会在需要时，从固定 SHA-256 的源码包编译 HarfBuzz 8.3.0
 
 按 [Python 平台标签规范](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/)，
 `manylinux_2_36_x86_64` 表示 x86_64 上的 glibc 2.36 及更新版本。完整 Firefox 160
-构建及两个发行版安装结果仍需实际 CI 验证，本地源码回归不等同于发布产物验收。
+构建及同一份 0.4.1 wheel 在两个发行版上的安装测试均已通过
+[远端 CI](https://github.com/Starktomy/ff-ruyijs/actions/runs/43922863710)。
 
-本次实际运行的检查及仍待 CI 完成的发布检查见
-[2026-11-16 验证记录](linux-ci-validation-20261116.md)。
+产物哈希、101 个 ELF 的 ABI 检查及安装结果见
+[远端验证记录](linux-ci-validation-20261117.md)。较早的
+[本地验证记录](linux-ci-validation-20261116.md) 保留源码及 C 夹具的检查结果。

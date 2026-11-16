@@ -68,8 +68,10 @@ headers throughout; no system Brotli headers are required.
 
 The glibc rule follows the [Python platform-tag specification](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/):
 `manylinux_2_36_x86_64` describes glibc 2.36 and later on x86_64. The full Firefox
-160 build and both installation jobs still need an actual CI run; local source
-regressions alone are not release-artifact verification.
+160 build and installation of the same 0.4.1 wheel on both distributions passed
+[remote CI](https://github.com/Starktomy/ff-ruyijs/actions/runs/43922863710).
 
-See [the dated CI validation record](linux-ci-validation-20261116.md) for the
-checks actually run locally and the full release checks still pending CI.
+See [the remote validation record](linux-ci-validation-20261117.md) for artifact
+hashes, the 101-ELF ABI scan and the installed-wheel results. The earlier
+[local validation record](linux-ci-validation-20261116.md) covers source and C
+fixture tests performed before the remote build.
