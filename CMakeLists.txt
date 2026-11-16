@@ -11,7 +11,7 @@ find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 find_package(PkgConfig REQUIRED)
 # Linux replaces the DirectWrite/Core Text fonts, CNG/CommonCrypto and the
 # WIC/ImageIO codecs with these libraries (tools/product_sources.py LINUX_ONLY).
-pkg_check_modules(NATIVE REQUIRED IMPORTED_TARGET harfbuzz fontconfig openssl zlib libwebpdemux lcms2)
+pkg_check_modules(NATIVE REQUIRED IMPORTED_TARGET harfbuzz>=7.0.0 fontconfig openssl zlib libwebpdemux lcms2)
 set(GENERATED "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(GLOB RUYIJS_SOURCE_INPUTS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/src/*/*.cpp")
 file(GLOB RUYIJS_GENERATED_INPUTS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/tools/generated/*.h")
@@ -50,7 +50,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 # Firefox's own Skia (gfx/skia of the donor's source tree), the raster backend
 # Windows and macOS take from a Firefox browser build, compiled here with
 # Skia's Fontconfig/FreeType ports (tools/prepare_skia_linux.py).
-pkg_check_modules(SKIA_DEPS REQUIRED IMPORTED_TARGET freetype2 harfbuzz-subset fontconfig zlib)
+pkg_check_modules(SKIA_DEPS REQUIRED IMPORTED_TARGET freetype2 harfbuzz-subset>=7.0.0 fontconfig zlib)
 execute_process(COMMAND "${Python3_EXECUTABLE}" -B "${PROJECT_SOURCE_DIR}/tools/prepare_skia_linux.py"
   --firefox-source "${DONOR_SOURCE}" --output "${CMAKE_CURRENT_BINARY_DIR}/firefox_skia.cmake" COMMAND_ERROR_IS_FATAL ANY)
 include("${CMAKE_CURRENT_BINARY_DIR}/firefox_skia.cmake")
@@ -59,6 +59,7 @@ set(SKIA_ROOT "${DONOR_SOURCE}/gfx/skia/skia")
 add_library(ruyijs_objects OBJECT ${RUYIJS_SOURCES})
 target_compile_features(ruyijs_objects PRIVATE cxx_std_20)
 target_include_directories(ruyijs_objects PRIVATE src "${GENERATED}"
+  "${PROJECT_SOURCE_DIR}/vendor/compression-native/brotli/include"
   "${RUYIJS_DONOR_OBJ}/dist/include" "${RUYIJS_DONOR_OBJ}/js/src" "${DONOR_SOURCE}/js/src"
   "${DONOR_SOURCE}/js/src/shell" "${SKIA_ROOT}")
 target_compile_definitions(ruyijs_objects PRIVATE RUYIJS_FIREFOX_SKIA MOZILLA_CLIENT MOZ_HAS_MOZGLUE EXPORT_JS_API)

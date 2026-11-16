@@ -59,6 +59,13 @@ paths against the wheel's tag and the 2.36 ceiling. Donor, NSS/Neqo and cbindgen
 caches have separate bookworm/glibc236 keys. The cross-distribution installation
 jobs must also pass before the reusable Linux workflow succeeds.
 
+Bookworm ships HarfBuzz 6, while the font implementation requires
+[`hb_font_set_synthetic_bold`](https://harfbuzz.github.io/harfbuzz-hb-font.html#hb-font-set-synthetic-bold)
+from HarfBuzz 7 or later. The deps step builds SHA-256-pinned HarfBuzz 8.3.0
+and its subset library on bookworm when necessary, retaining the glibc floor
+and bundling the source release's license. Brotli uses the frozen vendor
+headers throughout; no system Brotli headers are required.
+
 The glibc rule follows the [Python platform-tag specification](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/):
 `manylinux_2_36_x86_64` describes glibc 2.36 and later on x86_64. The full Firefox
 160 build and both installation jobs still need an actual CI run; local source

@@ -51,6 +51,12 @@ donor 步骤用发行版自带的 Python（`/usr/bin/python3`，Debian 12 为 3.
 cbindgen 缓存使用独立的 bookworm/glibc236 键。两项发行版安装测试也是 Linux
 工作流成功的必要条件。
 
+Bookworm 自带 HarfBuzz 6，字体实现需要 HarfBuzz 7 起提供的
+[`hb_font_set_synthetic_bold`](https://harfbuzz.github.io/harfbuzz-hb-font.html#hb-font-set-synthetic-bold)。
+deps 步骤会在需要时，从固定 SHA-256 的源码包编译 HarfBuzz 8.3.0 及 subset 库，
+保持 glibc 基线，并把该源码版本的许可证随包收集。Brotli 始终使用冻结的 vendor
+头文件，不依赖系统 Brotli 头文件。
+
 按 [Python 平台标签规范](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/)，
 `manylinux_2_36_x86_64` 表示 x86_64 上的 glibc 2.36 及更新版本。完整 Firefox 160
 构建及两个发行版安装结果仍需实际 CI 验证，本地源码回归不等同于发布产物验收。

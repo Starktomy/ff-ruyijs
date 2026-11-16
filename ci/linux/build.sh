@@ -47,6 +47,7 @@ case "$step" in
     # wants /usr/lib/llvm-21/bin first on PATH (the workflow adds it).
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
       "llvm-$LLVM" "libclang-$LLVM-dev"
+    bash ci/linux/build_harfbuzz.sh
     command -v cbindgen >/dev/null || cargo install cbindgen --version 0.29.4 --locked
     "clang++-$LLVM" --version | head -1; rustc --version; cbindgen --version; cmake --version | head -1 ;;
   donor)
