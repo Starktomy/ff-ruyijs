@@ -156,7 +156,11 @@ def main():
     nss = build / "dist/Release"
     target = site / "necko"
     for library in (nss / "lib").glob("*.so"):
-        shutil.copy2(library, target / library.name)
+        destination = target / library.name
+        shutil.copy2(library, destination)
+        # RUNPATH is not transitive: NSS must find its own NSPR dependencies
+        # before the final wheel bundler rewrites all library paths.
+        run(["patchelf", "--set-rpath", "$ORIGIN", destination])
     vendor = root / "native/necko_posix"
     # The Brotli 1.2.0 decoder of vendor/compression-native, which Windows and
     # macOS compile too; ruyijs_necko/brotli_native.py accepts only that version.

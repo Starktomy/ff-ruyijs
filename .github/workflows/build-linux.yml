@@ -118,8 +118,27 @@ jobs:
           path: obj/js-linux
           key: ${{ steps.donor.outputs.cache-primary-key }}
 
+      - name: Restore native runtime
+        id: shell
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            dist/js
+            dist/libruyijs_client.so
+          key: native-shell-linux-bookworm-glibc236-${{ steps.toolchain.outputs.hash }}-${{ steps.firefox.outputs.sha }}-${{ hashFiles('src/**', 'tools/**', 'profiles/**', 'vendor/*-native/**', 'CMakeLists.txt', 'pyproject.toml', 'ci/linux/build_harfbuzz.sh') }}
+
       - name: Build dist/js and libruyijs_client.so
+        if: steps.shell.outputs.cache-hit != 'true'
         run: ci/linux/build.sh shell
+
+      - name: Save native runtime
+        if: steps.shell.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            dist/js
+            dist/libruyijs_client.so
+          key: ${{ steps.shell.outputs.cache-primary-key }}
 
       - name: Restore NSS and Neqo builds
         id: necko
