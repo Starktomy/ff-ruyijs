@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Linux x86_64 build of ruyijs against the Firefox 160.0 source in firefox/
 # (the submodule; FIREFOX_SOURCE overrides the location). Each step is one step
-# of ci/linux/build-linux.yml; run them in order on Ubuntu 24.04:
+# of build-linux.yml; CI uses Debian 12 with Python 3.14 built on bookworm.
+# The steps also support a local Ubuntu build, whose wheel keeps its host tag:
 #
 #   ci/linux/build.sh deps     apt packages, clang 21 (apt.llvm.org), cbindgen
 #   ci/linux/build.sh donor    SpiderMonkey standalone objdir   -> obj/js-linux
@@ -36,7 +37,7 @@ case "$step" in
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
       cmake ninja-build pkg-config patchelf libffi-dev zlib1g-dev \
       libfontconfig-dev libfreetype-dev libharfbuzz-dev libssl-dev \
-      libwebp-dev liblcms2-dev libstb-dev
+      libwebp-dev liblcms2-dev libstb-dev fontconfig fonts-dejavu-core fonts-liberation
     if ! command -v "clang-$LLVM" >/dev/null; then
       curl -fsSL https://apt.llvm.org/llvm.sh -o "$RUNNER_TEMP/llvm.sh"
       sudo bash "$RUNNER_TEMP/llvm.sh" "$LLVM"
@@ -50,7 +51,7 @@ case "$step" in
     "clang++-$LLVM" --version | head -1; rustc --version; cbindgen --version; cmake --version | head -1 ;;
   donor)
     # The configuration Starktomy's Linux port (pull request #5) was validated with.
-    # configure and make run on the distribution Python (3.12 on Ubuntu 24.04),
+    # configure and make run on the distribution Python (3.11 on Debian 12),
     # not on the 3.14 the helper needs.
     mkdir -p "$donor"
     cd "$donor"

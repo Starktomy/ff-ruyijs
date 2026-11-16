@@ -14,9 +14,10 @@
 /out-share-*.zip
 /out-share-*.zip.sha256
 /artifacts/
-# Keep local test files out, admit the one runtime-integration suite.
+# Keep local test files out, admit runtime integration and wheel ABI checks.
 /tests/*
 !/tests/test_macos_runtime.py
+!/tests/test_linux_wheel_abi.py
 # Only the native build and wheel tools are public; audit/probe tools stay local.
 /tools/*
 !/tools/README.md

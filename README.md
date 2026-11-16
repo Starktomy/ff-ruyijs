@@ -60,6 +60,8 @@ The Windows wheel ships the SHA256-pinned SpiderMonkey + Necko runtime (~42 MB).
 
 **Linux x86_64:** the `manylinux_2_39_x86_64` wheel is a native ELF build, contributed by [@Starktomy](https://github.com/Starktomy) in #5. Text uses fontconfig, FreeType and HarfBuzz with the fonts installed on the machine, WebCrypto uses OpenSSL 3, and the Necko helper (NSS 3.131, Neqo for HTTP/3) brings its own Python. See [docs/linux.md](docs/linux.md).
 
+This fork's Linux CI now targets `manylinux_2_36_x86_64`: it builds in Debian 12 and tests the same wheel in Debian 12 and Ubuntu 26.04. This applies to newly built, validated fork artifacts; existing upstream PyPI wheels keep the requirements of their own tags.
+
 To upgrade:
 ```sh
 python -m pip install --upgrade ruyijs

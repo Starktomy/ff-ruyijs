@@ -1,11 +1,11 @@
 name: Build (Linux)
 
-# Builds ruyijs for Linux x86_64 on Ubuntu 24.04 from the official Firefox
+# Builds ruyijs for Linux x86_64 in Debian 12 from the official Firefox
 # release in the firefox/ submodule: SpiderMonkey, Skia and NSS/NSPR come from
 # that source tree, libnecko_core/libnecko_quic from native/necko_posix against
 # that NSS. Every `run:` is one ci/linux/build.sh step; that script lists what
-# each step builds and needs. Ubuntu 24.04 has glibc 2.39, so the wheel is
-# tagged manylinux_2_39_x86_64. Called by wheels.yml; can also run on its own.
+# each step builds and needs. Debian 12 has glibc 2.36; the same wheel is tested
+# in Debian 12 and Ubuntu 26.04. Called by wheels.yml; can also run on its own.
 on:
   workflow_call:
   workflow_dispatch:
@@ -21,22 +21,27 @@ jobs:
   ruyijs-linux:
     name: ruyijs (Linux x86_64)
     runs-on: ubuntu-24.04
+    container: python:3.14-bookworm
     timeout-minutes: 300
     env:
       CC: clang-21
       CXX: clang++-21
+      RUYIJS_LINUX_GLIBC_BASELINE: "2.36"
     steps:
+      - name: Debian build prerequisites
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            ca-certificates curl git gnupg lsb-release sudo python3 python3-venv
+          . /etc/os-release
+          test "$VERSION_ID" = 12
+          test "$(getconf GNU_LIBC_VERSION)" = "glibc 2.36"
+          python3 --version
+          /usr/bin/python3 --version
+
       - name: Runner facts
         run: |
           echo "CPUs: $(nproc)  RAM: $(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1048576 )) GB"
-          df -h "$GITHUB_WORKSPACE"
-
-      # The Firefox checkout (4.9 GB), obj/js-linux (2 GB) and build/ (1 GB)
-      # do not fit the space the image leaves free.
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
-            /opt/hostedtoolcache/CodeQL
           df -h "$GITHUB_WORKSPACE"
 
       - uses: actions/checkout@v4
@@ -55,23 +60,29 @@ jobs:
           git -C firefox -c checkout.workers=0 checkout -q --detach FETCH_HEAD
           git -C firefox log -1 --format='%H %cI'
 
-      # build_necko_linux.py runs on, and the wheel bundles, Python 3.14. The
-      # SpiderMonkey configure and the wheel test use the distribution 3.12.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
+      # Build Python and the helper on the same glibc floor as every native
+      # library. A Python from the Ubuntu runner can require a newer glibc.
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Restore cbindgen
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cbindgen
-          key: cbindgen-0.29.4-linux
+          key: cbindgen-0.29.4-linux-bookworm-glibc236
 
       - name: Toolchain and libraries
+        id: toolchain
         run: |
           ci/linux/build.sh deps
           # NSS's build.sh runs plain `clang`; this also puts LLVM 21's tools first.
           echo "/usr/lib/llvm-21/bin" >> "$GITHUB_PATH"
+          {
+            rustc -vV
+            clang-21 --version
+          } | sha256sum | awk '{print "hash=" substr($1,1,16)}' >> "$GITHUB_OUTPUT"
+
+      - name: ABI gate regression tests
+        run: python3 -B -m unittest discover -s tests -p test_linux_wheel_abi.py -v
 
       # Besides the Firefox commit, the objdir depends only on the donor step of
       # build.sh (its configure options), so changes to the other steps keep it.
@@ -87,7 +98,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: obj/js-linux
-          key: firefox-js-linux-${{ steps.firefox.outputs.sha }}-${{ steps.donor-config.outputs.hash }}
+          key: firefox-js-linux-bookworm-glibc236-${{ steps.toolchain.outputs.hash }}-${{ steps.firefox.outputs.sha }}-${{ steps.donor-config.outputs.hash }}
 
       - name: Build SpiderMonkey
         if: steps.donor.outputs.cache-hit != 'true'
@@ -110,7 +121,7 @@ jobs:
           path: |
             build/necko
             build/necko-quic
-          key: necko-linux-${{ steps.firefox.outputs.sha }}-${{ hashFiles('runtime.json', 'tools/build_necko_linux.py', 'tools/build_neqo_linux.py', 'native/necko_posix/**') }}
+          key: necko-linux-bookworm-glibc236-${{ steps.toolchain.outputs.hash }}-${{ steps.firefox.outputs.sha }}-${{ hashFiles('runtime.json', 'tools/build_necko_linux.py', 'tools/build_neqo_linux.py', 'native/necko_posix/**') }}
 
       - name: Build the Necko helper
         run: ci/linux/build.sh necko
@@ -127,6 +138,9 @@ jobs:
       - name: Build the wheel
         run: ci/linux/build.sh wheel
 
+      - name: Verify every bundled ELF and the wheel tag
+        run: python3 -B ci/linux/check_wheel_abi.py wheelhouse/*.whl --glibc "$RUYIJS_LINUX_GLIBC_BASELINE"
+
       - name: Test the installed wheel
         run: ci/linux/build.sh test
 
@@ -137,12 +151,11 @@ jobs:
           du -sh firefox obj/* build/* vendor/necko-derived 2>/dev/null || true
 
       - name: Upload the wheel
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ruyijs-linux
           path: wheelhouse/*.whl
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload logs on failure
@@ -156,3 +169,38 @@ jobs:
             build/linux/.ninja_log
           if-no-files-found: ignore
           retention-days: 7
+
+  compatibility:
+    name: Install wheel (${{ matrix.image }})
+    needs: ruyijs-linux
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12-slim", "ubuntu:26.04"]
+    steps:
+      - name: Distribution Python and fonts
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            ca-certificates git python3 python3-venv fontconfig fonts-dejavu-core fonts-liberation
+          getconf GNU_LIBC_VERSION
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ruyijs-linux
+          path: wheelhouse
+      - name: Install the same wheel on the distribution Python
+        run: |
+          python3 -m venv /tmp/wheel-test
+          /tmp/wheel-test/bin/python -m pip install --no-index wheelhouse/*.whl
+      - name: Installed runtime and bundled helper checks
+        working-directory: /tmp
+        run: |
+          unset PYTHONPATH RUYIJS_SHELL LD_LIBRARY_PATH
+          for check in smoke_test helper_check layout_check layout_fingerprint_check \
+            timer_scale_check socks_proxy_check fetch_abort_check fetch_abort_transfer_check load_timer_check engine_check; do
+            /tmp/wheel-test/bin/python "$GITHUB_WORKSPACE/ci/$check.py"
+          done

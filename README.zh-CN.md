@@ -60,6 +60,8 @@ Windows 的 wheel 内置 SHA256 锁定的 SpiderMonkey + Necko 运行时（约 4
 
 **Linux x86_64：** `manylinux_2_39_x86_64` wheel 是原生 ELF 构建，由 [@Starktomy](https://github.com/Starktomy) 在 #5 贡献。文字用 fontconfig、FreeType 和 HarfBuzz 渲染机器上已安装的字体，WebCrypto 用 OpenSSL 3，Necko helper（NSS 3.131，HTTP/3 用 Neqo）自带 Python。见 [docs/linux.zh-CN.md](docs/linux.zh-CN.md)。
 
+本 fork 的 Linux CI 现以 `manylinux_2_36_x86_64` 为目标：在 Debian 12 编译，并将同一份 wheel 安装到 Debian 12 和 Ubuntu 26.04 测试。此兼容基线适用于新构建且通过验证的 fork 产物；现有上游 PyPI wheel 仍以各自的平台标签为准。
+
 升级：
 ```sh
 python -m pip install --upgrade ruyijs
