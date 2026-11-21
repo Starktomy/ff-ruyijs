@@ -647,7 +647,7 @@ public:
                 {
                     const ParsedSelector& selector = (*index.parsed[entry.first])[entry.second];
                     if (!selector.matches(element)) continue;
-                    for (const auto& prop : shared->Properties(rule)) {
+                    for (const auto& prop : shared.Properties(rule)) {
                         Candidate candidate;
                         candidate.value = prop.value;
                         candidate.important = prop.important;

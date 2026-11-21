@@ -1285,7 +1285,7 @@
       "base": "f9235ed078334c27ba0bb2b1944d13353cefbd98",
       "before": "b5ab3b214445b927bac76968d8a86fac65b308fb",
       "upstream": "71ab42d0ccf81c36e65c14491fce9bc3e994df15",
-      "merged": "abeb367d9b82fac594d13273de8caf396bc7c666"
+      "merged": "3abd4e2416f78d960d64d11ce2e52e1ce426d7b6"
     },
     {
       "path": "src/execution_scheduling/idle.cpp",
@@ -2082,6 +2082,15 @@
     },
     "local_full_compile": "unavailable: previous Firefox 159 donor objdir was already absent; full compile will use the matching Firefox 160 remote environment",
     "workflow_lint": "passed",
-    "native_tests": "pending matching donor CI"
+    "native_tests": "pending matching donor CI",
+    "stylesheet_header_syntax": "passed with -Wall -Wextra after adapting the declaration cache to upstream reference context",
+    "ci_attempts": [
+      {
+        "run_id": 44896288653,
+        "head_sha": "3b0f589ce0e8ee1b198c93dee0137ef2c8524858",
+        "conclusion": "failure",
+        "cause": "A fork declaration-cache call retained pointer member access after upstream changed StyleResolutionContext to a reference. Corrected shared->Properties(rule) to shared.Properties(rule)."
+      }
+    ]
   }
 }
