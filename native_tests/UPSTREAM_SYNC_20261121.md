@@ -55,9 +55,19 @@ checks passed. Uncommitted operator instructions and untracked documents were
 checked against their original SHA-256 values and preserved.
 
 The old local Firefox 159 donor object directory was already absent. Full
-compilation and runtime regressions therefore use the remote environment with
-the matching Firefox 160 donor. Results and the run link will be recorded after
-that workflow completes; local syntax checks are not native runtime validation.
+compilation and runtime regressions therefore used the remote environment with
+the matching Firefox 160 donor. [Linux run 44899221409](https://github.com/Starktomy/ff-ruyijs/actions/runs/44899221409)
+passed the native build, 51 native tests with one optional font skip, and the
+same wheel on Debian 12 and Ubuntu 26.04.
+
+The successful artifact is `ruyijs-0.4.2-py3-none-manylinux_2_36_x86_64.whl`
+with SHA-256
+`592a817ed2e12fa8a7531d6bf6b254d7c357b5bbee4ea7e6dbf6658f58883d97`.
+The application suite also passed all 87 tests against that wheel in an
+isolated environment. The earlier failed runs exposed a declaration-cache
+reference mismatch, a media-environment invalidation omission, and a
+multi-scope rooting issue; all were corrected and revalidated by the successful
+run.
 
 Logs and the merge-resolution record are under
 `artifacts/upstream-sync-20261121/`. No live CAPTCHA or backend-acceptance tests

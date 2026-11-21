@@ -2082,14 +2082,39 @@
     },
     "local_full_compile": "unavailable: previous Firefox 159 donor objdir was already absent; full compile will use the matching Firefox 160 remote environment",
     "workflow_lint": "passed",
-    "native_tests": "pending matching donor CI",
+    "native_tests": {
+      "passed": 51,
+      "skipped": 1,
+      "run_id": 44899221409
+    },
     "stylesheet_header_syntax": "passed with -Wall -Wextra after adapting the declaration cache to upstream reference context",
+    "linux_wheel": {
+      "filename": "ruyijs-0.4.2-py3-none-manylinux_2_36_x86_64.whl",
+      "sha256": "592a817ed2e12fa8a7531d6bf6b254d7c357b5bbee4ea7e6dbf6658f58883d97",
+      "abi_glibc": "2.36",
+      "compatibility": ["debian:12-slim", "ubuntu:26.04"]
+    },
+    "application_regressions": {
+      "passed": 87,
+      "kernel": "ruyijs-0.4.2-py3-none-manylinux_2_36_x86_64.whl"
+    },
     "ci_attempts": [
       {
         "run_id": 44896288653,
         "head_sha": "3b0f589ce0e8ee1b198c93dee0137ef2c8524858",
         "conclusion": "failure",
         "cause": "A fork declaration-cache call retained pointer member access after upstream changed StyleResolutionContext to a reference. Corrected shared->Properties(rule) to shared.Properties(rule)."
+      },
+      {
+        "run_id": 44897246249,
+        "head_sha": "34570c2a91d59a9a072eaee3c0fad367baac62f5",
+        "conclusion": "failure",
+        "cause": "A computed-style cache omitted media environment state, and separate rooted sample vectors did not retain the combined multi-scope state safely. Corrected both and moved wheel upload ahead of runtime tests in 4f103fd4218e98e649d38ae3a7df7dec6abc4db6."
+      },
+      {
+        "run_id": 44899221409,
+        "head_sha": "4f103fd4218e98e649d38ae3a7df7dec6abc4db6",
+        "conclusion": "success"
       }
     ]
   }
