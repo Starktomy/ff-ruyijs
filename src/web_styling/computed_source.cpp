@@ -1,3 +1,4 @@
+#include <unordered_map>
 #include "domain/styling/stylesheet.h"
 #include "domain/styling/css_color_value.h"
 #include "web_styling/internal.h"
@@ -10,8 +11,11 @@
 namespace ruyijs::web_styling {
 struct ComputedStyleReader::Impl {
   struct Scope {
+    JS::PersistentRootedObject scope;
     std::shared_ptr<const std::vector<ruyijs::domain::styling::StyleSheetAggregate>> aggregates;
     ruyijs::domain::styling::StyleResolutionContext computation;
+    std::unordered_map<const ruyijs::domain::styling::StyleDeclaration*, ComputedStyle> projections;
+    Scope(JSContext* cx, JS::HandleObject object) : scope(cx, object) {}
   };
   State& state;
   JS::RootedObjectVector scopes;
@@ -29,22 +33,6 @@ bool ColorProperty(const std::string& name) {
   static const char suffix[] = "color";
   if (name.size() < 5 || name.compare(name.size() - 5, 5, suffix) != 0) return false;
   return name != "color-scheme" && name.rfind("color-", 0) != 0 && name != "print-color-adjust";
-}
-// The serialized custom-property suffix of a computed style. The map is shared
-// (copy on write) by every element that inherits it, so the text is memoized by
-// the map's identity and reused across elements of one getComputedStyle sweep.
-std::string SerializeCustoms(const css::StyleDeclaration& computed) {
-  const void* identity = computed.customs_identity();
-  if (!identity) return {};
-  static thread_local const void* cachedIdentity = nullptr;
-  static thread_local std::string cachedText;
-  if (identity != cachedIdentity) {
-    std::string text;
-    for (const auto& entry : computed.customs()) text += entry.first + ": " + entry.second.value + ";";
-    cachedIdentity = identity;
-    cachedText = std::move(text);
-  }
-  return cachedText;
 }
 void ComputeColors(ComputedStyle* style) {
   std::string current;
@@ -70,7 +58,7 @@ bool ComputedStyleReader::PrepareScope(JS::HandleObject element, size_t* scopeIn
   size_t index=0;
   for(;index<impl_->scopes.length();++index) if(impl_->scopes[index]==scope) break;
   if(index==impl_->scopes.length()) {
-    auto entry=std::make_unique<Impl::Scope>();
+    auto entry=std::make_unique<Impl::Scope>(state.cx, scope);
     std::shared_ptr<const SelectorDependencies> dependencies;
     if (!ReadCascadeSources(state,element,&entry->aggregates,&dependencies,&entry->computation.store)||
         !impl_->scopes.append(scope) || !impl_->samples.append(element)) return false;
@@ -93,6 +81,7 @@ bool ComputedStyleReader::Read(JS::HandleObject element, ComputedStyle* out) {
   if (!impl_->input) impl_->input = std::make_unique<SelectorInput>(state, element);
   else impl_->input->Target(element);
   SelectorInput& input = *impl_->input;
+  struct ClearGuard { SelectorInput& in; ~ClearGuard() { in.ClearTarget(); } } clearGuard{input};
   const auto* node = input.Load();
   if (!node) return false;
   size_t index;
@@ -101,23 +90,33 @@ bool ComputedStyleReader::Read(JS::HandleObject element, ComputedStyle* out) {
   std::vector<const css::StyleSheetAggregate*> pointers;
   pointers.reserve(source.aggregates->size());
   for (const auto& aggregate : *source.aggregates) pointers.push_back(&aggregate);
-  const auto computed = css::StyleResolutionService::compute_style(pointers, *node, &source.computation);
+  const auto& computed = css::StyleResolutionService::compute_style_ref(pointers, *node, source.computation);
   if (!input.ok()) return false;
+  if (node->key) {
+    const auto cached = source.projections.find(&computed);
+    if (cached != source.projections.end()) {
+      *out = cached->second;
+      return true;
+    }
+  }
   ComputedStyle result;
   result.fontSize = computed.computed_font_size;
   result.rootFontSize = computed.root_font_size;
   result.specifiedMarginMask = computed.specified_margin_mask;
   result.specifiedBorderMask = computed.specified_border_mask;
   result.specifiedPaddingMask = computed.specified_padding_mask;
+  const auto& initials = css::StyleResolutionService::initial_values();
+  result.values.reserve(computed.all().size() + initials.size());
   for (const auto& entry : computed.all())
     result.values.emplace_back(entry.first, entry.first == "line-height"
         ? css::CssResolvedLineHeight(computed) : entry.second.value);
-  for (const auto& entry : css::StyleResolutionService::initial_values())
+  for (const auto& entry : initials)
     if (!computed.all().count(entry.first)) result.values.emplace_back(entry.first, entry.second);
-  result.customsText = SerializeCustoms(computed);
+  result.customs = computed.customs_ptr();
   result.childInputs = css::StyleResolutionService::child_inputs(computed);
   result.inheritsReset = computed.inherits_reset;
   ComputeColors(&result);
+  if (node->key) source.projections.emplace(&computed, result);
   *out = std::move(result);
   return true;
 }
@@ -130,6 +129,7 @@ bool ComputedStyleReader::ReadDefault(JS::HandleObject element, ComputedStyle* o
   if (!isElement) return WebKit::Fail(state.cx, "getDefaultComputedStyle requires an Element");
   if (!impl_->input) impl_->input = std::make_unique<SelectorInput>(state, element);
   else impl_->input->Target(element);
+  struct ClearGuard { SelectorInput& in; ~ClearGuard() { in.ClearTarget(); } } clearGuard{*impl_->input};
   const auto* node = impl_->input->Load();
   if (!node) return false;
   // A detached copy of the ancestor chain without inline declarations; keys are
@@ -141,6 +141,7 @@ bool ComputedStyleReader::ReadDefault(JS::HandleObject element, ComputedStyle* o
     copy->key = 0;
     copy->parent = nullptr;
     copy->relations = nullptr;  // the copy is self-contained: parents only
+    copy->ancestor_bloom_ready = false;
     chain.push_back(std::move(copy));
     if (!impl_->input->ok()) return false;
   }
@@ -156,7 +157,7 @@ bool ComputedStyleReader::ReadDefault(JS::HandleObject element, ComputedStyle* o
         ? css::CssResolvedLineHeight(computed) : entry.second.value);
   for (const auto& entry : css::StyleResolutionService::initial_values())
     if (!computed.all().count(entry.first)) result.values.emplace_back(entry.first, entry.second);
-  result.customsText = SerializeCustoms(computed);
+  result.customs = computed.customs_ptr();
   ComputeColors(&result);
   *out = std::move(result);
   return true;
@@ -173,14 +174,14 @@ bool ComputedStyleReader::ScopeStamps(JS::MutableHandleObjectVector samples, std
   for (size_t i=0;i<impl_->samples.length();++i) {
     JS::RootedObject element(impl_->state.cx,impl_->samples[i]);
     uint64_t stamp=0;
-    if (!CascadeStamp(impl_->state,element,&stamp) || !samples.append(element)) return false;
+    if (!CascadeStamp(impl_->state,element,&stamp,true) || !samples.append(element)) return false;
     stamps->push_back(stamp);
   }
   return true;
 }
 const SelectorDependencies& ComputedStyleReader::Dependencies() const { return impl_->dependencies; }
 bool Realm::CascadeStamp(JS::HandleObject element, uint64_t* stamp) {
-  return web_styling::CascadeStamp(*state_, element, stamp);
+  return web_styling::CascadeStamp(*state_, element, stamp, true);
 }
 std::unique_ptr<ComputedStyleReader> Realm::BeginComputedRead() {
   return std::make_unique<ComputedStyleReader>(*state_);

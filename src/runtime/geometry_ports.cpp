@@ -166,10 +166,6 @@ bool BindGeometryPorts(BrowsingContext& context) {
     return true;
   }, &context);
   context.geometry->SetBoxPorts(boxes);
-  context.document->SetPointGeometryPort([](void* raw, JS::HandleObject root, double x, double y,
-                                           JS::MutableHandleObjectVector out) {
-    return static_cast<BrowsingContext*>(raw)->geometry->ElementsFromPoint(root, x, y, out);
-  }, &context);
   context.styling->SetUsedBoxPort([](void* raw, JS::HandleObject element,
                                      web_styling::UsedBox* out, bool* present) {
     auto& owner = *static_cast<BrowsingContext*>(raw);
@@ -195,6 +191,21 @@ bool BindGeometryPorts(BrowsingContext& context) {
       if (!present) return true;
     }
     return owner.geometry->MeasureOffset(element, out);
+  }, &context);
+  context.document->SetPointQueryPort([](void* raw, JS::HandleObject root_element,
+                                         double x, double y, bool all,
+                                         std::vector<document_model::NodeKey>* out) {
+    auto& owner = *static_cast<BrowsingContext*>(raw);
+    out->clear();
+    if (owner.parent) {
+      JS::RootedObject frame(owner.cx);
+      if (!owner.parent->document->WrapNode(owner.frame_element, &frame)) return false;
+      std::array<double, 4> rect{};
+      bool present = false;
+      if (!owner.parent->geometry->MeasureElement(frame, &rect, &present, true)) return false;
+      if (!present) return true;
+    }
+    return owner.geometry->HitTestPoint(root_element, x, y, all, out);
   }, &context);
   BindElementScroll(context);
   JS::RootedObject graphics(context.cx, context.document->svgPrototype(false));

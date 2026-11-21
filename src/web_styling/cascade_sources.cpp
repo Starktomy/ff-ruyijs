@@ -15,12 +15,15 @@ void Dependencies(const std::vector<std::shared_ptr<ruyijs::domain::styling::Css
     Dependencies(row->children, out);
   }
 }
-const SheetCache::RuleSummary& SummarizeRules(const SheetCache& cache);
+bool HasMedia(const std::vector<std::shared_ptr<ruyijs::domain::styling::CssomRuleValue>>& rows) {
+  for(const auto& row:rows) if(row->kind==4||HasMedia(row->children)) return true;
+  return false;
+}
 bool CurrentRules(State& state,const SheetCache& cache,
                   ruyijs::domain::styling::CssMediaEnvironment* environment,bool* initialized,
                   std::vector<ruyijs::domain::styling::StyleSheetAggregate>* out) {
   if(cache.disabled||cache.rules.empty()) return true;
-  if(!*initialized&&(!cache.media.text().empty()||SummarizeRules(cache).hasMedia)) {
+  if(!*initialized&&(!cache.media.text().empty()||HasMedia(cache.rules))) {
     if(!ReadConditionEnvironment(state,environment)) return false;
     *initialized=true;
   }
@@ -29,7 +32,7 @@ bool CurrentRules(State& state,const SheetCache& cache,
   out->back().append_rule_values(cache.rules,*environment);
   return true;
 }
-// Visits the sheets of `element`'s cascade scope in cascade order: the
+//Visits the sheets of `element`'s cascade scope in cascade order: the
 // document's sheet sources, then its adopted sheets. One walk serves both the
 // cascade input and its fingerprint, so the two cannot disagree.
 template <class Visit>
@@ -71,35 +74,26 @@ void Mix(uint64_t* hash, const std::string& text) {
   Mix(hash, &size, sizeof size);
   Mix(hash, text.data(), text.size());
 }
-void MixRules(uint64_t* hash, const std::vector<std::shared_ptr<ruyijs::domain::styling::CssomRuleValue>>& rows,
-              bool* media) {
+void MixRules(uint64_t* hash, const std::vector<std::shared_ptr<ruyijs::domain::styling::CssomRuleValue>>& rows) {
   const uint64_t count = rows.size();
   Mix(hash, &count, sizeof count);
   for (const auto& row : rows) {
     Mix(hash, &row->kind, sizeof row->kind);
-    Mix(hash, row->selector);
-    if (row->kind == 6) Mix(hash, row->DeclarationText());
-    else Mix(hash, row->StringDeclarations());
-    Mix(hash, row->condition);
+    Mix(hash, row->selector); Mix(hash, row->DeclarationText()); Mix(hash, row->condition);
     Mix(hash, row->media.text());
-    *media |= row->kind == 4;
-    MixRules(hash, row->children, media);
+    MixRules(hash, row->children);
   }
 }
-void MixEnvironment(uint64_t* hash, const ruyijs::domain::styling::CssMediaEnvironment& environment) {
-  const double numbers[] = {environment.width, environment.height, environment.deviceWidth,
-                            environment.deviceHeight, environment.ratio, environment.color};
-  Mix(hash, numbers, sizeof numbers);
-  Mix(hash, &environment.touch, sizeof environment.touch);
-  for (const auto& [name, value] : environment.profile) { Mix(hash, name); Mix(hash, value); }
-}
-const SheetCache::RuleSummary& SummarizeRules(const SheetCache& cache) {
-  if (!cache.ruleSummary) {
-    SheetCache::RuleSummary summary{1469598103934665603ull, false};
-    MixRules(&summary.hash, cache.rules, &summary.hasMedia);
-    cache.ruleSummary = summary;
-  }
-  return *cache.ruleSummary;
+void EnsureSheetDigest(const State& state, SheetCache& cache) {
+  if (cache.digestGeneration == state.cssomGeneration) return;
+  uint64_t digest = 1469598103934665603ull;
+  MixRules(&digest, cache.rules);
+  cache.rulesDigest = digest;
+  cache.rulesHaveMedia = HasMedia(cache.rules);
+  auto deps = std::make_shared<SelectorDependencies>();
+  Dependencies(cache.rules, deps.get());
+  cache.rulesDependencies = std::move(deps);
+  cache.digestGeneration = state.cssomGeneration;
 }
 }  // namespace
 
@@ -115,25 +109,31 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
     std::shared_ptr<ruyijs::domain::styling::RuleIndexStore>* indexes) {
   ruyijs::domain::styling::CssMediaEnvironment environment;
   bool environment_initialized = false, media = false;
+  auto selectors = std::make_shared<SelectorDependencies>();
   State* owner = nullptr;
   uint64_t hash = 1469598103934665603ull;
-  if (!VisitCascadeSheets(caller, element, [&](State& state, const SheetCache& cache) {
+  if (!VisitCascadeSheets(caller, element, [&](State& state, SheetCache& cache) {
         if (!owner) owner = &state;
+        EnsureSheetDigest(state, cache);
         const unsigned char flags = (cache.disabled ? 1 : 0) | (cache.rules.empty() ? 2 : 0);
         Mix(&hash, &flags, 1);
         Mix(&hash, &cache.key, sizeof cache.key);
         Mix(&hash, cache.href);
         Mix(&hash, cache.media.text());
-        const auto& summary = SummarizeRules(cache);
-        Mix(&hash, &summary.hash, sizeof summary.hash);
+        Mix(&hash, &cache.rulesDigest, sizeof cache.rulesDigest);
         if (!cache.disabled && !cache.rules.empty() && !media)
-          media = !cache.media.text().empty() || summary.hasMedia;
+          media = !cache.media.text().empty() || cache.rulesHaveMedia;
+        if (!cache.disabled && cache.rulesDependencies) selectors->Merge(*cache.rulesDependencies);
         return true;
       })) return false;
   if (media) {
     if (!ReadConditionEnvironment(*owner, &environment)) return false;
     environment_initialized = true;
-    MixEnvironment(&hash, environment);
+    const double numbers[] = {environment.width, environment.height, environment.deviceWidth,
+                              environment.deviceHeight, environment.ratio, environment.color};
+    Mix(&hash, numbers, sizeof numbers);
+    Mix(&hash, &environment.touch, sizeof environment.touch);
+    for (const auto& [name, value] : environment.profile) { Mix(&hash, name); Mix(&hash, value); }
   }
   auto& memo = caller.cascadeInputs;
   for (const auto& entry : memo)
@@ -141,12 +141,8 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
       *out = entry.aggregates; *dependencies = entry.dependencies; *indexes = entry.indexes;
       return true;
     }
-  // Selector dependencies are derived from the same rules already covered by
-  // the fingerprint. Reuse them on a hit instead of reparsing every selector.
-  auto selectors = std::make_shared<SelectorDependencies>();
   auto built = std::make_shared<std::vector<ruyijs::domain::styling::StyleSheetAggregate>>();
-  if (!VisitCascadeSheets(caller, element, [&](State& state, const SheetCache& cache) {
-        if (!cache.disabled) Dependencies(cache.rules, selectors.get());
+  if (!VisitCascadeSheets(caller, element, [&](State& state, SheetCache& cache) {
         return CurrentRules(state, cache, &environment, &environment_initialized, built.get());
       })) return false;
   if (memo.size() >= 8) memo.erase(memo.begin());
@@ -158,31 +154,37 @@ bool ReadCascadeSources(State& caller, JS::HandleObject element,
   return true;
 }
 // The fingerprint of everything the cascade reads from `element`'s sheets:
-// order, disabled flags, sheet media, every rule's text and conditional media
-// inputs. Computed blocks can outlive an enclosing iframe resize without any
-// mutation of the child document; its viewport and profile must invalidate them.
+// order, disabled flags, sheet media and every rule's text. Media results also
+// depend on the environment, which the layout cache keys separately.
 bool CascadeStamp(State& caller, JS::HandleObject element, uint64_t* stamp) {
+  return CascadeStamp(caller, element, stamp, false);
+}
+bool CascadeStamp(State& caller, JS::HandleObject element, uint64_t* stamp,
+                  bool includeEnvironment) {
   uint64_t hash = 1469598103934665603ull;
-  State* owner = nullptr;
   bool media = false;
-  const bool ok = VisitCascadeSheets(caller, element, [&](State& state, const SheetCache& cache) {
+  State* owner = nullptr;
+  const bool ok = VisitCascadeSheets(caller, element, [&](State& state, SheetCache& cache) {
     if (!owner) owner = &state;
+    EnsureSheetDigest(state, cache);
     const unsigned char flags = (cache.disabled ? 1 : 0) | (cache.rules.empty() ? 2 : 0);
     Mix(&hash, &flags, 1);
     Mix(&hash, cache.media.text());
-    const auto& summary = SummarizeRules(cache);
-    Mix(&hash, &summary.hash, sizeof summary.hash);
-    if (!cache.disabled && !cache.rules.empty())
-      media |= !cache.media.text().empty() || summary.hasMedia;
+    Mix(&hash, &cache.rulesDigest, sizeof cache.rulesDigest);
+    if (includeEnvironment && !cache.disabled && !cache.rules.empty() && !media)
+      media = !cache.media.text().empty() || cache.rulesHaveMedia;
     return true;
   });
-  if (!ok) return false;
-  if (media) {
+  if (ok && includeEnvironment && media && owner) {
     ruyijs::domain::styling::CssMediaEnvironment environment;
     if (!ReadConditionEnvironment(*owner, &environment)) return false;
-    MixEnvironment(&hash, environment);
+    const double numbers[] = {environment.width, environment.height, environment.deviceWidth,
+                              environment.deviceHeight, environment.ratio, environment.color};
+    Mix(&hash, numbers, sizeof numbers);
+    Mix(&hash, &environment.touch, sizeof environment.touch);
+    for (const auto& [name, value] : environment.profile) { Mix(&hash, name); Mix(&hash, value); }
   }
   *stamp = hash;
-  return true;
+  return ok;
 }
 }

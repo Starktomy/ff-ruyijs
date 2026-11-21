@@ -93,10 +93,11 @@ class Realm final {
   bool SvgLengthViewportSize(double* width, double* height);
   void SetBoxPorts(const BoxPorts&);
   bool MeasureElement(JS::HandleObject, std::array<double, 4>*, bool* present, bool content = false);
-  bool ElementsFromPoint(JS::HandleObject root, double x, double y, JS::MutableHandleObjectVector);
   // Content box in viewport coordinates, for the embedding frame's screen origin.
   bool MeasureContentRect(JS::HandleObject, std::array<double, 4>*, bool* present);
   bool MeasureOffset(JS::HandleObject, document_model::OffsetGeometry*);
+  bool HitTestPoint(JS::HandleObject root_element, double x, double y, bool all,
+                    std::vector<document_model::NodeKey>* out);
   // The used box of an element for getComputedStyle resolved values (#42):
   // content width and height, padding, margin and border widths (top, right,
   // bottom, left), and the relative or absolute insets. *present is false for

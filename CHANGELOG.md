@@ -5,6 +5,102 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-20
+
+### Added
+
+- `Context(http_timeout=..., http_read_timeout=...)`: seconds one page HTTP request may take (default 15,
+  from connecting to the last body byte; a redirect chain gets 5 s more) and may wait for its next byte
+  (default 10), up to 3600. Both were fixed, at 15 s in the Necko helper and 20 s for the redirect chain,
+  so a response that kept sending for 36 s failed at 15 s, and `Context(timeout=...)` (the host's
+  command wait) could not change that (#45). Engine sessions take them too; sessions sharing a
+  `network` must agree on them. Bodies are still buffered: a server-sent-events response resolves when it
+  ends. `ci/http_timeout_check.py`.
+- `net_log(clear=True)` reads and drops the network log in one command, and `clear_net_log()` drops it,
+  as `console_log(clear=True)` does. `clear_resources()` never touched the log, which stops recording at
+  4096 entries (#46). `ci/net_log_check.py`.
+
+### Changed
+
+- Style resolution indexes stylesheet rules by their rightmost selector and shares sibling styles,
+  `getComputedStyle` reads share one cascade reader per tree revision, and live collections only
+  rescan when their own kind of change happens, so an unrelated `setAttribute` no longer invalidates
+  every `getElementsByTagName`/`children` list (#36, by ladydd). 500 cold `getComputedStyle` reads on a
+  1500-row page: 219 → 106 ms.
+- Node getters (`nodeName`, `parentNode`, sibling and child links, `isConnected`, `tagName`,
+  `childElementCount`, `CharacterData.length`, TreeWalker steps) read only the field they need, and a
+  parent with 64 or more children keeps a position index (#37, by ladydd). Timers use an indexed queue
+  with handle maps (#38, by ladydd); task order on the logical clock is unchanged.
+
+### Fixed
+
+- `net_log()` under memory pressure crashed the whole process, and with it every session of a shared
+  `Engine`: a failed string allocation for an entry's `error` was stored as a string-tagged null, and a
+  failed entry object was written to before its check. Every allocation is now checked and the call raises
+  `JSError` (out of memory); the other sessions keep running. `GPUBuffer.mapState` had the same unchecked
+  allocation (#46).
+- `pointer-events` was not inherited, so a child of a `pointer-events: none` element still received
+  `elementFromPoint` hits and its computed value was empty. `elementFromPoint`/`elementsFromPoint` on
+  `Document` and `ShadowRoot` now hit-test in paint order per stacking context (z-index, opacity,
+  transforms, filters, isolation, fixed and sticky positioning), so a `z-index: 100` child of a
+  `z-index: 1` parent stays below a `z-index: 2` sibling; they honour overflow clipping, visibility,
+  transforms and rounded corners. `ShadowRoot.elementFromPoint` threw `NotSupportedError` (#45, PR #47).
+- A `Range`, and the `Selection` built on it, kept its offsets when the text or tree under it changed:
+  `insertData(0, 'X')` before a selected `bc` made it select `ab`, and a range left past the end of
+  shortened text crashed the process when read. Ranges now follow `insertData`, `deleteData`,
+  `replaceData`, `data`/`nodeValue`/`textContent`, `splitText`, `normalize()`, insertions and removals
+  as the DOM standard specifies (#45, PR #47). 46 cases measured against Firefox 160 agree, except
+  `splitText` on a Text node without a parent, where Firefox moves the range to the new node and the
+  standard does not.
+- `getComputedStyle()` returned a snapshot: a declaration kept from before an inline style, class,
+  attribute, ancestor, style sheet, `adoptedStyleSheets` or viewport change kept its old values. It is
+  live now, as in Firefox. Each property read also serialized and re-parsed the whole declaration,
+  including every inherited custom property; a page with a 3.6 MB style sheet spent most of its input
+  handling there. Reads now look up one property, and layout runs only for the properties that need it
+  (#48, PR #49).
+- Nested flex layout depended on how many nodes the document had, so markup without whitespace between
+  tags laid out differently: a `flex-grow` item that should get 180px got 0px and the footer after it moved
+  up 180px (#50). A row container placed each stretched item at its content height and again at its
+  stretched height, which doubled the work per nesting level until the layout's placement budget ran out.
+  A single-line container with a definite cross size now places a stretched item once, at its line's
+  cross size (CSS Flexbox §9.4). `ci/flex_nesting_check.py` compares 14 layouts with Firefox 160.
+- `getElementById` could return the wrong element or nothing after `cloneNode`, `setAttributeNS`,
+  `toggleAttribute`, the XML parser, or once an id had been duplicated; `document.getElementsByTagNameNS`
+  always returned an empty list. `querySelector('#id')` on a document and `namedItem` use the id index
+  where it gives the same answer, and `namedItem` now prefers the first element in collection order whose
+  id or name matches, as Firefox does (#41, by Facetomyself).
+- A live `HTMLCollection` handed out a stale wrapper after a prepend or removal; `Element.attributes`
+  missed a `style` attribute that `el.style.x = ...` created; `getComputedStyle` did not follow `:focus`
+  changes (#36).
+- On the logical clock a Worker's reply never reached the page: `advance()` ran past the worker's poll
+  before the child process had started (#40, by Facetomyself). The poll now waits a little wall time
+  while a reply may be on its way (worker just started or posted to), up to 5 s per wait; an idle or
+  silent worker does not slow `advance()` down.
+- `Context.type()` on a `contenteditable` element changed nothing and fired no `input` (#44). Typed text,
+  Backspace and Enter now edit an editing host at the window's selection, as measured in Firefox 160:
+  text joins the Text node at the caret and replaces a selected range, runs of spaces alternate with
+  no-break spaces, Enter splits the block (`insertParagraph`), an emptied block keeps its `<br>`.
+  `document.execCommand` runs `insertText`, `delete`, `forwardDelete`, `insertParagraph` and
+  `insertLineBreak` the same way. Focusing an editing host places the caret in it.
+- `Selection` kept no state: `addRange`, `collapse`, `setBaseAndExtent`, `extend`, `selectAllChildren` and
+  the other methods now hold real ranges, with `anchorNode`/`focusNode`, `direction`, `type`,
+  `getRangeAt`, `containsNode`, `deleteFromDocument`, `getComposedRanges` and `toString()` (Firefox's
+  plain-text serialization); `selectionchange` fires at the document. `document.getSelection()` returned
+  null; it returns the window's `Selection` (#44).
+- A `put`, `add`, `get`, cursor or index request on an object store inside `onupgradeneeded` threw
+  `TransactionInactiveError`. The versionchange transaction now runs its requests before it completes
+  and the open request succeeds; an aborted upgrade fails them and reverts the database (#44).
+- A live `NodeList` or `HTMLCollection` (`childNodes`, `children`, `getElementsBy*`) that script had
+  indexed kept handing out the old node at that index after the subtree was rebuilt, for example by
+  `innerHTML`.
+
+`ci/selection_check.py` compares these with Firefox 160 captures. Not covered yet: `Selection.modify()`
+moves by character inside one Text node only. Still unsupported (#45): the clipboard
+(`navigator.clipboard` rejects with `NotAllowedError`, `execCommand('paste')` returns false, and there is
+no host paste input) and page visibility (`document.visibilityState` is always `visible`, with no host
+control). Cross-site cookies follow `SameSite=Lax` by default; a cookie a third party sets needs
+`SameSite=None; Secure`.
+
 ## [0.4.1] - 2026-11-16
 
 ### Added

@@ -97,9 +97,14 @@ bool BlurElement(JSContext*, JS::HandleObject element);
 // mousedown's default action: focus the nearest focusable inclusive ancestor,
 // or clear the document's focus.
 bool PointerFocus(JSContext*, JS::HandleObject target);
+// Typed text, Backspace and Enter's default actions: an input/textarea edits
+// its value; an editing host (contenteditable, designMode) edits at the
+// window's selection (editing.cpp), where a line feed splits the paragraph.
 bool InsertText(JSContext*, JS::HandleObject element, DomStringView text, bool* inserted);
 bool DeleteBackward(JSContext*, JS::HandleObject element, bool* deleted);
 bool Multiline(JSContext*, JS::HandleObject element, bool* multiline);
+// Whether `element` is an editing host or inside one (Enter: insertParagraph).
+bool Editing(JSContext*, JS::HandleObject element, bool* editing);
 // `target`'s element ancestors, inclusive, from the root element down.
 bool ElementPath(JSContext*, JS::HandleObject target, JS::MutableHandleObjectVector path);
 // The click's activation behavior: form control activation or hyperlink.
@@ -151,7 +156,7 @@ class Realm final {
   void SetCanvasDimensionPort(CanvasDimensionPort port, void* context);
   // HTMLElement offset* read the layout owner through this port (bound after install).
   void SetOffsetGeometryPort(OffsetGeometryPort port, void* context);
-  void SetPointGeometryPort(PointGeometryPort port, void* context);
+  void SetPointQueryPort(PointQueryPort port, void* context);
   void SetElementScrollPort(const ElementScrollPort& port);
   // The queued scroll notification of |element| is being delivered.
   void ElementScrollDelivered(JS::HandleObject element);

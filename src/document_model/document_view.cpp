@@ -1,14 +1,14 @@
 #include "document_model/state.h"
 #include "js/Array.h"
 #include "js/Conversions.h"
+#include "js/Object.h"
+#include "js/Realm.h"
 #include "js/Wrapper.h"
 #include "js/CallAndConstruct.h"
 #include "js/PropertyAndElement.h"
 #include "js/ValueArray.h"
-#include "js/Realm.h"
-#include "js/Object.h"
 #include <cmath>
-#include <set>
+#include <vector>
 
 namespace ruyijs::document_model {
 namespace {
@@ -61,42 +61,72 @@ bool Call(JSContext* cx, unsigned argc, JS::Value* vp) {
   if (method < 2 && !std::isfinite(y))
     return TypeError(cx, (std::string("Document.") + methods[method] +
         ": Argument 2 is not a finite floating-point value.").c_str());
-  if (method < 2) {
-    JS::RootedObjectVector hits(cx), visible(cx);
-    if (Same(entry->key, state.main) && state.pointGeometry) {
-      JS::RootedObject root(cx);
-      {
-        JSAutoRealm realm(cx, state.page);
-        DocumentSnapshot doc;
-        JS::RootedValue value(cx);
-        if (!state.Check(state.model.InspectDocument(entry->key, &doc)) ||
-            !state.Wrap(doc.document_element, &value)) return false;
-        if (value.isObject()) root = &value.toObject();
+
+  if (method == 0 || method == 1) {
+    auto* docEntry = static_cast<Wrapper*>(JS::GetReservedSlot(receiver, 0).toPrivate());
+    std::vector<NodeKey> filtered;
+    if (docEntry && !docEntry->dead && docEntry->owner && std::isfinite(x) && std::isfinite(y)) {
+      State& docState = *docEntry->owner;
+      if (docState.pointQuery && Same(docEntry->key, docState.main)) {
+        std::vector<NodeKey> rawHits;
+        {
+          JSAutoRealm realm(cx, docState.page);
+          DocumentSnapshot doc;
+          if (!docState.Check(docState.model.InspectDocument(docEntry->key, &doc))) return false;
+          if (doc.document_element.node) {
+            JS::RootedValue rootVal(cx);
+            if (!docState.Wrap(doc.document_element, &rootVal)) return false;
+            if (rootVal.isObject()) {
+              JS::RootedObject rootObj(cx, &rootVal.toObject());
+              if (!docState.pointQuery(docState.pointQueryContext, rootObj, x, y, method == 1, &rawHits))
+                return false;
+            }
+          }
+          for (const NodeKey& k : rawHits) {
+            NodeKey target;
+            bool inShadow = false;
+            if (!docState.Check(docState.model.Retarget(k, &docState.model, docEntry->key, &target, &inShadow)))
+              return false;
+            NodeKind kind = NodeKind::Document;
+            if (!target.node || !docState.Check(docState.model.Kind(target, &kind)) || kind != NodeKind::Element)
+              continue;
+            bool dup = false;
+            for (const NodeKey& existing : filtered) {
+              if (Same(existing, target)) { dup = true; break; }
+            }
+            if (!dup) {
+              filtered.push_back(target);
+              if (method == 0) break;
+            }
+          }
+        }
+        if (method == 0) {
+          JS::RootedValue elemVal(cx, JS::NullValue());
+          if (!filtered.empty()) {
+            JSAutoRealm realm(cx, docState.page);
+            if (!docState.Wrap(filtered.front(), &elemVal)) return false;
+          }
+          if (!JS_WrapValue(cx, &elemVal)) return false;
+          args.rval().set(elemVal);
+          return true;
+        }
+        JS::RootedObject array(cx, JS::NewArrayObject(cx, filtered.size()));
+        if (!array) return false;
+        for (size_t i = 0; i < filtered.size(); ++i) {
+          JS::RootedValue elemVal(cx);
+          {
+            JSAutoRealm realm(cx, docState.page);
+            if (!docState.Wrap(filtered[i], &elemVal)) return false;
+          }
+          if (!JS_WrapValue(cx, &elemVal) || !JS_DefineElement(cx, array, uint32_t(i), elemVal, JSPROP_ENUMERATE))
+            return false;
+        }
+        args.rval().setObject(*array);
+        return true;
       }
-      if (root && !state.pointGeometry(state.pointGeometryContext, root, x, y, &hits)) return false;
     }
-    std::set<std::pair<uint64_t,uint64_t>> seen;
-    for (size_t i=0; i<hits.length(); ++i) {
-      JS::RootedObject node(cx,hits[i]), projected(cx);
-      bool shadow = false;
-      if (!state.sourceRealm->RetargetEventTarget(node, receiver, &projected, &shadow)) return false;
-      auto* raw = js::CheckedUnwrapStatic(projected);
-      auto* record = static_cast<Wrapper*>(JS::GetReservedSlot(raw,0).toPrivate());
-      if (!seen.emplace(record->key.document,record->key.node).second) continue;
-      if (!JS_WrapObject(cx,&projected) || !visible.append(projected)) return false;
-      if (!method) break;
-    }
-    if (!method) {
-      args.rval().setObjectOrNull(visible.empty()?nullptr:visible[0]);
-      return true;
-    }
-    JS::RootedObject result(cx,JS::NewArrayObject(cx,visible.length()));
-    if (!result) return false;
-    for (size_t i=0; i<visible.length(); ++i)
-      if (!JS_SetElement(cx,result,i,visible[i])) return false;
-    args.rval().setObject(*result);
-    return true;
   }
+
   if (method == 1) {
     JS::RootedObject array(cx, JS::NewArrayObject(cx, 0));
     if (!array) return false;

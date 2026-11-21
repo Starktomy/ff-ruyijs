@@ -2,7 +2,9 @@
 
 #include "browser_environment/environment.h"
 #include "js/Realm.h"
+#include "web_styling/computed_source.h"
 #include "web_styling/internal.h"
+#include "web_styling/computed_source.h"
 #include "web_styling/page_descriptors.h"
 
 namespace ruyijs::web_styling {
@@ -43,11 +45,13 @@ State::State(JSContext* context, JS::HandleObject global, PageHelpers& helpers,
   }
 }
 State::~State() {
+  computedBlocks.reader.reset();
   // Native shared holders may outlive this owner until the closing GC.
   for (const auto& cache : sheets) cache->object = nullptr;
 }
 
-JSObject* State::NewStyleView(const std::string& text, JS::MutableHandleObject out, JS::HandleObject rule) {
+JSObject* State::NewStyleView(const std::string& text, JS::MutableHandleObject out,
+                              JS::HandleObject rule, JS::HandleObject element) {
   JS::RootedString block(cx, JS_NewStringCopyUTF8N(cx, JS::UTF8Chars(text.data(), text.size())));
   if (!block) return nullptr;
   const bool pageView=rule&&RuleDataOf(rule).kind==6;
@@ -57,6 +61,7 @@ JSObject* State::NewStyleView(const std::string& text, JS::MutableHandleObject o
   JS::SetReservedSlot(object, 0, JS::StringValue(block));
   JS::SetReservedSlot(object, 1, JS::PrivateValue(this));
   JS::SetReservedSlot(object, 2, rule ? JS::ObjectValue(*rule) : JS::NullValue());
+  JS::SetReservedSlot(object, 3, element ? JS::ObjectValue(*element) : JS::NullValue());
   if(pageView) {
     JS::RootedValue storage(cx,JS::ObjectValue(*object));js::ProxyOptions options;
     options.setClass(&kPageDescriptorsClass);

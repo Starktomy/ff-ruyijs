@@ -14,7 +14,7 @@ bool PageSelectorSet(JSContext* cx,unsigned argc,JS::Value* vp) {
   if(!CssReceiver(cx,args.thisv(),&kPageRuleClass,&self)||!CssString(cx,args.get(0),&text)) return false;
   if(RuleSlotValue(self,RuleParent).isObject()&&ruyijs::domain::styling::CssPageSelector(text,&parsed)) {
     RuleDataOf(self).selector=std::move(parsed);
-    InvalidateRules(self);
+    ++RuleOwnerOf(self).cssomGeneration;
   }
   args.rval().setUndefined();return true;
 }

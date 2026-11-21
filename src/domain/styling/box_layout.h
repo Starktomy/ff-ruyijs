@@ -146,4 +146,6 @@ BoxRect ProjectBoxRect(const std::vector<BoxNode>&, const std::vector<BoxLayout>
 bool BoxContainsPoint(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
                       const BoxViewport&, size_t target, const BoxRect&, double x, double y,
                       bool horizontal = true, bool vertical = true);
+bool HitBoxPoint(const std::vector<BoxNode>&, const std::vector<BoxLayout>&,
+                 const BoxViewport&, size_t target, double vx, double vy);
 }

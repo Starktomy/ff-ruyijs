@@ -227,6 +227,10 @@ jobs:
         run: |
           unset PYTHONPATH RUYIJS_SHELL LD_LIBRARY_PATH
           for check in smoke_test helper_check layout_check layout_fingerprint_check \
-            timer_scale_check socks_proxy_check fetch_abort_check fetch_abort_transfer_check load_timer_check engine_check; do
+            timer_scale_check socks_proxy_check fetch_abort_check fetch_abort_transfer_check \
+            load_timer_check engine_check selection_check cascade_collection_check \
+            node_getter_check timer_scaling_check dom_id_index_check dom_tag_ns_check \
+            dom_id_fastpath_check worker_blob_message_check computed_style_check \
+            hit_test_and_live_range_check flex_nesting_check net_log_check http_timeout_check; do
             /tmp/wheel-test/bin/python "$GITHUB_WORKSPACE/ci/$check.py"
           done

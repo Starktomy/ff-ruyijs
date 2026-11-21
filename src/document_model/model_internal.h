@@ -81,16 +81,29 @@ struct Model::Impl {
   Limits limits;
   DocumentId next_document = 0;
   DraftId next_draft = 0;
-  uint64_t revision = 0;
-  // Bumped by every mutation except an inline-style write: no collection or
-  // token view depends on the style attribute (StructureRevision).
-  uint64_t structure = 0;
+  uint64_t revision = 1;
+  // Bumped by every mutation except an in-place update to an existing style
+  // attribute or a no-op attribute write/remove: adding or removing style still
+  // changes Element.attributes (NamedNodeMap) membership (StructureRevision).
+  uint64_t structure = 1;
   // Bumped by tree changes only (nodes inserted, removed or moved, text and
   // other character data); attribute writes leave it (TreeRevision).
-  uint64_t tree = 0;
-  void Touch() noexcept { ++revision; ++structure; ++tree; }
-  void TouchAttribute() noexcept { ++revision; ++structure; }
-  void TouchStyle() noexcept { ++revision; }
+  uint64_t tree = 1;
+  // Bumped by tree changes and class-attribute changes (ClassRevision).
+  uint64_t classes = 1;
+  // Unchanged by edits of elements outside a document (ConnectedRevision).
+  uint64_t connected = 0;
+  void Touch() noexcept { ++revision; ++structure; ++tree; ++classes; ++connected; }
+  void TouchClass(bool in_document = true) noexcept {
+    ++revision; ++structure; ++classes; if (in_document) ++connected;
+  }
+  void TouchAttribute(bool in_document = true) noexcept { ++revision; ++structure; if (in_document) ++connected; }
+  void TouchStyle(bool in_document = true) noexcept { ++revision; if (in_document) ++connected; }
+  bool IsComposedConnected(NodeKey key) const {
+    const auto found = documents.find(key.document);
+    if (found == documents.end() || !found->second->get_node(key.node)) return false;
+    return found->second->composed_root_id(key.node) == found->second->id();
+  }
   // Real-change log; see Model::SetMutationRecording. Bounded, oldest first.
   static constexpr size_t kMutationLogLimit = 4096;
   std::deque<MutationNotice> mutations;
@@ -114,6 +127,30 @@ struct Model::Impl {
   void (*treeSink)(void*, DocumentId, const std::vector<NodeKey>&,
                    const std::vector<NodeKey>&) = nullptr;
   void* treeSinkContext = nullptr;
+  Model::RangeSink rangeSink{};
+  void NoteRangeRemove(NodeKey parent, domain::NodeId child, uint32_t old_index) noexcept {
+    if (rangeSink.before_remove && parent.node && child)
+      rangeSink.before_remove(rangeSink.context, parent, Key(parent.document, child), old_index);
+  }
+  void NoteRangeInsert(NodeKey parent, uint32_t index, uint32_t count) noexcept {
+    if (rangeSink.after_insert && parent.node && count > 0)
+      rangeSink.after_insert(rangeSink.context, parent, index, count);
+  }
+  void NoteRangeData(NodeKey node, uint32_t offset, uint32_t count, uint32_t inserted) noexcept {
+    if (rangeSink.replace_data && node.node)
+      rangeSink.replace_data(rangeSink.context, node, offset, count, inserted);
+  }
+  void NoteRangeSplit(NodeKey node, NodeKey new_node, NodeKey parent,
+                      uint32_t parent_index_after, uint32_t offset) noexcept {
+    if (rangeSink.split_text && node.node && new_node.node)
+      rangeSink.split_text(rangeSink.context, node, new_node, parent, parent_index_after, offset);
+  }
+  void NoteRangeMerge(NodeKey kept_text, uint32_t kept_old_length, NodeKey merged_sibling,
+                      NodeKey parent, uint32_t sibling_index) noexcept {
+    if (rangeSink.merge_text && kept_text.node && merged_sibling.node)
+      rangeSink.merge_text(rangeSink.context, kept_text, kept_old_length, merged_sibling, parent,
+                           sibling_index);
+  }
   // Engine-collection request from the node cap; the owning realm runs one
   // collection and its wrapper reclaim, then the cap is re-checked (T41).
   void (*reclaim)(void*) = nullptr;

@@ -33,7 +33,7 @@ bool TextSet(JSContext* cx,unsigned argc,JS::Value* vp) {
   if(member&&ruyijs::domain::styling::CssSelectorSyntax(text,RuleDataOf(self).nested)) {
     RuleDataOf(self).selector=RuleDataOf(self).nested?ruyijs::domain::styling::CssNestedSelectorText(text):
       ruyijs::domain::styling::CssSelectorText(text);
-    InvalidateRules(self);
+    ++RuleOwnerOf(self).cssomGeneration;
   }
   args.rval().setUndefined();return true;
 }
@@ -77,7 +77,7 @@ bool RuleStyleSet(JSContext* cx,unsigned argc,JS::Value* vp) {
     ruyijs::domain::styling::CssDeclarationContext::Page);
   else row.declarations=row.kind==8?ruyijs::domain::styling::CssKeyframeDeclarations(text):
     ruyijs::domain::styling::CssDeclarationText(text);
-  InvalidateRules(self);
+  ++state.cssomGeneration;
   args.rval().setUndefined();return true;
 }
 namespace {

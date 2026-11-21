@@ -59,7 +59,7 @@ bool RuleMediaSet(JSContext* cx,unsigned argc,JS::Value* vp) {
   std::string text;
   if(!args.get(0).isNull()&&!CssString(cx,args.get(0),&text)) return false;
   RuleDataOf(self).media.set(text);
-  InvalidateRules(self);
+  ++RuleOwnerOf(self).cssomGeneration;
   args.rval().setUndefined();return true;
 }
 }
