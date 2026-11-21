@@ -167,9 +167,6 @@ jobs:
       - name: Verify every bundled ELF and the wheel tag
         run: python3 -B ci/linux/check_wheel_abi.py wheelhouse/*.whl --glibc "$RUYIJS_LINUX_GLIBC_BASELINE"
 
-      - name: Test the installed wheel
-        run: ci/linux/build.sh test
-
       - name: Disk after build
         if: always()
         run: |
@@ -183,6 +180,9 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
           retention-days: 14
+
+      - name: Test the installed wheel
+        run: ci/linux/build.sh test
 
       - name: Upload logs on failure
         if: failure()

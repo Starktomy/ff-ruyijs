@@ -12,19 +12,19 @@ namespace ruyijs::web_styling {
 struct ComputedStyleReader::Impl {
   struct Scope {
     JS::PersistentRootedObject scope;
+    JS::PersistentRootedObject sample;
     std::shared_ptr<const std::vector<ruyijs::domain::styling::StyleSheetAggregate>> aggregates;
     ruyijs::domain::styling::StyleResolutionContext computation;
     std::unordered_map<const ruyijs::domain::styling::StyleDeclaration*, ComputedStyle> projections;
-    Scope(JSContext* cx, JS::HandleObject object) : scope(cx, object) {}
+    Scope(JSContext* cx, JS::HandleObject object, JS::HandleObject representative)
+        : scope(cx, object), sample(cx, representative) {}
   };
   State& state;
-  JS::RootedObjectVector scopes;
-  JS::RootedObjectVector samples;
   std::vector<std::unique_ptr<Scope>> sources;
   // Relation frames read once per session, shared by every element it reads.
   std::unique_ptr<SelectorInput> input;
   SelectorDependencies dependencies;
-  explicit Impl(State& owner):state(owner),scopes(owner.cx),samples(owner.cx) {}
+  explicit Impl(State& owner):state(owner) {}
 };
 namespace {
 namespace css = ruyijs::domain::styling;
@@ -56,12 +56,12 @@ bool ComputedStyleReader::PrepareScope(JS::HandleObject element, size_t* scopeIn
   if (!state.cascadeScope(state.adoptedContext,element,&scope,&shadow)) return false;
   scope=js::CheckedUnwrapStatic(scope);
   size_t index=0;
-  for(;index<impl_->scopes.length();++index) if(impl_->scopes[index]==scope) break;
-  if(index==impl_->scopes.length()) {
-    auto entry=std::make_unique<Impl::Scope>(state.cx, scope);
+  for(;index<impl_->sources.size();++index) if(impl_->sources[index]->scope==scope) break;
+  if(index==impl_->sources.size()) {
+    auto entry=std::make_unique<Impl::Scope>(state.cx, scope, element);
     std::shared_ptr<const SelectorDependencies> dependencies;
-    if (!ReadCascadeSources(state,element,&entry->aggregates,&dependencies,&entry->computation.store)||
-        !impl_->scopes.append(scope) || !impl_->samples.append(element)) return false;
+    if (!ReadCascadeSources(state,element,&entry->aggregates,&dependencies,&entry->computation.store))
+      return false;
     if (dependencies) impl_->dependencies.Merge(*dependencies);
     impl_->sources.push_back(std::move(entry));
   }
@@ -169,10 +169,10 @@ bool ReadComputed(State& state, JS::HandleObject element, ComputedStyle* out) {
 bool Realm::ReadComputed(JS::HandleObject element, ComputedStyle* out) {
   return web_styling::ReadComputed(*state_, element, out);
 }
-size_t ComputedStyleReader::Scopes() const { return impl_->scopes.length(); }
+size_t ComputedStyleReader::Scopes() const { return impl_->sources.size(); }
 bool ComputedStyleReader::ScopeStamps(JS::MutableHandleObjectVector samples, std::vector<uint64_t>* stamps) {
-  for (size_t i=0;i<impl_->samples.length();++i) {
-    JS::RootedObject element(impl_->state.cx,impl_->samples[i]);
+  for (const auto& source : impl_->sources) {
+    JS::RootedObject element(impl_->state.cx,source->sample);
     uint64_t stamp=0;
     if (!CascadeStamp(impl_->state,element,&stamp,true) || !samples.append(element)) return false;
     stamps->push_back(stamp);

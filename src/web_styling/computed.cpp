@@ -204,7 +204,7 @@ bool ObtainComputedRecord(State& state, JS::HandleObject element,
   uint64_t revision = 0, stamp = 0, viewport = 0;
   bool connected = false;
   const bool cacheable = wrapper && wrapper->owner && !wrapper->dead &&
-      CascadeStamp(state, stateElement, &stamp);
+      CascadeStamp(state, stateElement, &stamp, true);
   if (cacheable) {
     connected = wrapper->owner->model.IsConnected(wrapper->key);
     revision = connected
